@@ -2,6 +2,17 @@
 
 Every change to the planner gets an entry here: what changed and why. Newest first.
 
+## 2026-11-19: Runs as an Apps Script web app
+
+**What changed**
+- Added `Code.gs`: serves the planner from Apps Script and saves all data in the attached Google Sheet.
+- The planner detects when it's running in Apps Script and saves to that sheet automatically. No key or connection step needed.
+- Removed `google-sheet-backend.gs` and the "Connect Google Sheet" form. Apps Script hosting replaces them.
+- Budget & rules shows where data is saved, with Download backup and Restore from backup.
+
+**Why**
+- Keep the planner and its data inside Firebrand's Google account, open only to Firebrand logins, with one shared link for the team.
+
 ## 2026-11-19: Saving outside claude.ai
 
 **What changed**

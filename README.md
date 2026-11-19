@@ -25,30 +25,25 @@ No sales, vendor or invoice data is stored in this repository.
 
 ## Where data is saved
 
-The planner picks where to save on its own:
-
 | Where it's opened | Where it saves | Who sees it |
 |---|---|---|
-| claude.ai (the live link) | The shared claude.ai database | Everyone with the link |
-| A copy from GitHub, nothing set up | That browser on that computer | Only that browser |
-| A copy from GitHub, connected to a Google Sheet | The Google Sheet in Firebrand's Drive | Everyone connected to the same sheet |
+| **Apps Script web app (the team version)** | The Google Sheet the script is attached to, in Firebrand's Drive | Everyone at Firebrand with the link |
+| claude.ai | The shared claude.ai database | Everyone with the claude.ai link |
+| `index.html` opened straight from a computer | That browser only | Only that browser |
 
-Browser saving needs no setup. Data survives refreshes and restarts, but it stays on that computer and is lost if the browser's site data is cleared, so use **Download backup** now and then.
+## Set it up in Apps Script
 
-### Connect a Google Sheet so the team shares one copy
+1. Create a Google Sheet in Firebrand's Drive, e.g. "Ordering Planner Data". This is where the data lives.
+2. In the sheet, go to **Extensions > Apps Script**.
+3. Replace everything in `Code.gs` with this repo's `Code.gs`.
+4. Click **+ > HTML** and name it `Index`. Replace everything in it with this repo's `index.html`.
+5. **Deploy > New deployment**, type **Web app**. Execute as **Me**, Who has access **Anyone within Firebrand**. Approve the permissions.
+6. Copy the Web app URL (ends in `/exec`) and share it with the team. Only people signed in with a Firebrand Google account can open it.
+7. Open **Budget & rules** and enter last month's sales, then upload the first Dutchie report.
 
-1. Create a Google Sheet in Firebrand's Drive, e.g. "Ordering Planner Data".
-2. In the sheet, go to Extensions > Apps Script. Delete what's there and paste in all of `google-sheet-backend.gs`.
-3. Change `ACCESS_KEY` to a long secret phrase. Keep the real key out of GitHub.
-4. Deploy > New deployment > Web app. Execute as **Me**, Who has access **Anyone**. Approve, then copy the Web app URL (ends in `/exec`).
-5. Open the planner > **Budget & rules** > **Where data is saved**. Paste the URL and key, then choose **Connect Google Sheet**. If the sheet is empty, the planner offers to copy over what's already saved in that browser.
-6. Repeat step 5 on each computer that uses the planner.
+**Updating after a code change:** paste the new `Code.gs` / `index.html` into Apps Script, then **Deploy > Manage deployments > edit > Version: New version > Deploy**. The link stays the same. Add an entry to `CHANGELOG.md` for every change.
 
-Changes from teammates show up within 30 seconds. Without the key, nobody can read or change the data, even with the URL.
-
-### Backups
-
-**Download backup** saves everything (report, vendors, brand choices, invoices, rules, upload history) as one `.json` file. **Restore from backup** loads it into the browser or the connected sheet, which also moves data between them.
+**Moving data over:** on the claude.ai or browser version, go to Budget & rules > **Download backup**. Then on the Apps Script version, choose **Restore from backup**.
 
 ### What only works on claude.ai
 
@@ -64,14 +59,10 @@ Changes from teammates show up within 30 seconds. Without the key, nobody can re
 - Safety stock: Tier A 7 days, B 5 days, C 3 days. Overstock line: 60 days of supply.
 - Deliveries land Monday to Wednesday only.
 
-## How to run it
-
-Open `index.html` in Chrome, either by double-clicking the downloaded file or from any web host. It needs an internet connection to load the spreadsheet reader and fonts.
-
 ## Files
 
 - `index.html`: the full planner (HTML, CSS and JavaScript in one file)
-- `google-sheet-backend.gs`: the Apps Script that lets the planner save to a Google Sheet
+- `Code.gs`: the Apps Script that serves the planner and saves its data to the Google Sheet
 - `CHANGELOG.md`: what changed and why, newest first
 
 ## Note

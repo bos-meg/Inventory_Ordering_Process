@@ -453,8 +453,18 @@ async function sheetCall(cfg,body){
   return j;
 }
 function readLocalData(){try{return JSON.parse(localStorage.getItem(LOCAL_DATA_KEY)||"{}")||{}}catch(e){return {}}}
+/* Hosted as an Apps Script web app: talk to the server functions in Code.gs directly. */
+const IN_APPS_SCRIPT=!!(window.google&&google.script&&google.script.run);
+function gasCall(fn,...args){return new Promise((res,rej)=>google.script.run
+  .withSuccessHandler(r=>{try{res(typeof r==="string"?JSON.parse(r):r)}catch(e){rej(storeErr("bad_response"))}})
+  .withFailureHandler(e=>rej(storeErr(/quota|limit/i.test(String(e&&e.message))?"quota_exceeded":"sheet_error")))[fn](...args))}
 function makeStore(){
-  const cfg=storeCfg();const sheet=cfg.url&&SHEET_URL_RE.test(cfg.url)?cfg:null;
+  const cfg=storeCfg();const sheet=!IN_APPS_SCRIPT&&cfg.url&&SHEET_URL_RE.test(cfg.url)?cfg:null;
+  const remote=IN_APPS_SCRIPT?{
+      all:()=>gasCall("plannerAll"),set:(p,d)=>gasCall("plannerSet",p,JSON.stringify(d)),del:p=>gasCall("plannerDelete",p),imp:o=>gasCall("plannerImport",JSON.stringify(o))}
+    :sheet?{
+      all:async()=>(await sheetCall(sheet,{op:"all"})).docs||{},set:(p,d)=>sheetCall(sheet,{op:"set",path:p,data:d}),del:p=>sheetCall(sheet,{op:"delete",path:p}),imp:o=>sheetCall(sheet,{op:"import",docs:o})}
+    :null;
   let docs={};const listeners=new Set();
   const clone=d=>JSON.parse(JSON.stringify(d));
   const notify=()=>listeners.forEach(fn=>{try{fn()}catch(e){}});
@@ -462,18 +472,18 @@ function makeStore(){
   async function write(path,data){
     const had=path in docs,prev=docs[path];
     if(data==null)delete docs[path];else docs[path]=data;
-    try{if(sheet)await sheetCall(sheet,{op:data==null?"delete":"set",path,data});else persistLocal()}
+    try{if(remote)await(data==null?remote.del(path):remote.set(path,data));else persistLocal()}
     catch(e){if(had)docs[path]=prev;else delete docs[path];notify();throw e}
     notify();
   }
   async function refresh(){
-    if(!sheet){docs=readLocalData();return}
-    const j=await sheetCall(sheet,{op:"all"});const next=j.docs||{};
+    if(!remote){docs=readLocalData();return}
+    const next=(await remote.all())||{};
     if(JSON.stringify(next)!==JSON.stringify(docs)){docs=next;notify()}
   }
   const ready=refresh();
-  if(sheet)setInterval(()=>{if(!document.hidden)refresh().catch(()=>{})},30000);
-  if(!sheet)window.addEventListener("storage",e=>{if(e.key===LOCAL_DATA_KEY){docs=readLocalData();notify()}});
+  if(remote)setInterval(()=>{if(!document.hidden)refresh().catch(()=>{})},30000);
+  if(!remote)window.addEventListener("storage",e=>{if(e.key===LOCAL_DATA_KEY){docs=readLocalData();notify()}});
   function collDocs(name,order,lim){
     const pre=name+"/";
     let list=Object.keys(docs).filter(p=>p.startsWith(pre)&&!p.slice(pre.length).includes("/")).map(p=>({id:p.slice(pre.length),_d:docs[p],data:()=>docs[p]}));
@@ -483,7 +493,7 @@ function makeStore(){
   }
   function listen(fn,onErr){listeners.add(fn);ready.then(fn,e=>onErr&&onErr(e));return ()=>listeners.delete(fn)}
   return {
-    mode:sheet?"sheet":"browser",ready,
+    mode:IN_APPS_SCRIPT?"appsscript":sheet?"sheet":"browser",ready,
     doc(path){return {
       onSnapshot:(cb,onErr)=>listen(()=>cb({exists:path in docs,id:path.split("/").pop(),data:()=>docs[path]}),onErr),
       set:d=>write(path,clone(d)),
@@ -496,7 +506,7 @@ function makeStore(){
       async add(d){const id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);await write(name+"/"+id,clone(d));return {id}}};return c},
     exportAll:()=>clone(docs),
     async importAll(obj){
-      if(sheet)await sheetCall(sheet,{op:"import",docs:obj});
+      if(remote)await remote.imp(obj);
       else{const old=docs;docs=clone(obj);try{persistLocal()}catch(e){docs=old;throw e}}
       docs=clone(obj);notify();
     }
@@ -657,25 +667,25 @@ function freshLine(){
 function banner(){
   if(S.dbState==="none")return `<div class="notice">This copy can’t reach the shared data, so uploads and edits stay on this screen only. Open the planner in claude.ai to save them for the team.</div>`;
   if(S.dbState==="slow")return `<div class="notice">The shared data hasn’t loaded yet. Numbers may be missing or out of date.</div>`;
+  if(S.dbState==="error"&&S.storeMode==="appsscript")return `<div class="notice err">Can’t reach the planner’s Google Sheet. Reload the page, and if it keeps happening, check that you’re signed in with your Firebrand Google account.</div>`;
   if(S.dbState==="error")return S.storeMode==="sheet"
     ?`<div class="notice err">Can’t reach the Google Sheet${S.dbErr==="not_granted"?" (the access key doesn’t match)":""}. Check the connection on <a href="#setup">Budget &amp; rules</a>, then reload.</div>`
     :`<div class="notice err">The shared data stopped responding. Reload the page to reconnect.</div>`;
-  if(S.storeMode==="browser")return `<div class="notice small">Saving in this browser only. To share one set of data with the team, connect a Google Sheet on <a href="#setup">Budget &amp; rules</a>.</div>`;
+  if(S.storeMode==="browser")return `<div class="notice small">Saving in this browser only. To share data with the team, use the planner’s Apps Script link. See <a href="#setup">Budget &amp; rules</a>.</div>`;
   return "";
 }
 function storageSection(){
   if(S.storeMode==="claude")return `<section class="panel" style="margin-top:26px;max-width:760px"><h3>Where data is saved</h3><p class="small" style="margin:0">In the shared claude.ai database. Everyone with the link sees the same data.</p></section>`;
-  const cfg=storeCfg();const sheet=S.storeMode==="sheet";
-  return `<section class="panel" style="margin-top:26px;max-width:760px"><h3>Where data is saved</h3>
-    <p class="small" style="margin:0 0 12px">${sheet?`<b>Google Sheet.</b> Everyone connected to the same sheet shares the same uploads, vendor details, invoices and rules. Changes from others show up within 30 seconds.`:`<b>This browser only.</b> Data stays on this computer, in this browser. Connect a Google Sheet so the whole team shares one set of data.`}</p>
-    <form id="storeform" class="vgrid" style="grid-template-columns:1fr 200px">
-      <label>Apps Script web app URL<input name="url" type="url" value="${esc(cfg.url||"")}" placeholder="https://script.google.com/macros/s/…/exec" ${sheet?"readonly":""}></label>
-      <label>Access key<input name="key" type="password" value="${esc(cfg.key||"")}" placeholder="The key in the script" ${sheet?"readonly":""}></label>
-    </form>
-    <p class="btnrow">${sheet?`<button class="btn" id="storedisc">Disconnect</button>`:`<button class="btn primary" id="storeconn">Connect Google Sheet</button>`}
-      <button class="btn" id="storebackup">Download backup</button>
+  if(S.storeMode==="appsscript")return `<section class="panel" style="margin-top:26px;max-width:760px"><h3>Where data is saved</h3>
+    <p class="small" style="margin:0 0 12px">In the Google Sheet behind this app, in Firebrand’s Drive. Everyone who opens this link with a Firebrand Google account sees the same data. Changes from others show up within 30 seconds.</p>
+    <p class="btnrow"><button class="btn" id="storebackup">Download backup</button>
       <label class="btn" style="margin:0">Restore from backup<input type="file" id="storerestore" accept=".json,application/json" hidden></label></p>
-    <p class="small muted" style="margin:0">Setup steps are in the README on GitHub. A backup is one .json file with everything, which you can restore into a browser or a Google Sheet.${S.storeMode!=="claude"?" Invoice PDFs are only stored on claude.ai, so here only the invoice details are saved.":""}</p>
+    <p class="small muted" style="margin:0">Invoice PDFs are only stored on claude.ai, so here only the invoice details are saved. Claude can’t read invoices here, so type the details in.</p></section>`;
+  return `<section class="panel" style="margin-top:26px;max-width:760px"><h3>Where data is saved</h3>
+    <p class="small" style="margin:0 0 12px"><b>This browser only.</b> Data stays on this computer, in this browser. For one set of data the whole team shares, use the planner’s Apps Script link (setup is in the README on GitHub).</p>
+    <p class="btnrow"><button class="btn" id="storebackup">Download backup</button>
+      <label class="btn" style="margin:0">Restore from backup<input type="file" id="storerestore" accept=".json,application/json" hidden></label></p>
+    <p class="small muted" style="margin:0">A backup is one .json file with everything. Restore it in the Apps Script version to move this browser’s data to the team.</p>
   </section>`;
 }
 async function connectSheet(){
@@ -698,7 +708,7 @@ function restoreData(file){
   const r=new FileReader();
   r.onload=async()=>{let obj;try{obj=JSON.parse(r.result)}catch(e){toast("That isn’t a planner backup file");return}
     if(!obj||typeof obj!=="object"||Array.isArray(obj)){toast("That isn’t a planner backup file");return}
-    if(!confirm(`Replace everything saved ${S.storeMode==="sheet"?"in the Google Sheet":"in this browser"} with this backup?`))return;
+    if(!confirm(`Replace everything saved ${S.storeMode==="browser"?"in this browser":"in the Google Sheet"} with this backup?`))return;
     try{await S.db.importAll(obj);toast("Backup restored")}catch(e){toast(e.code==="quota_exceeded"?"This browser is out of space":"Couldn’t restore. Try again.")}};
   r.readAsText(file);
 }
