@@ -435,6 +435,79 @@ function allocate(b,units,cover){
   return alloc.filter(x=>x.u>0).sort((a,c)=>c.k.upd-a.k.upd).map(x=>({sku:x.k.sku,name:x.k.name,units:x.u,oh:x.k.oh,upd:x.k.upd,uc:x.k.uc}));
 }
 
+/* ---------- storage outside claude.ai ----------
+   On claude.ai the page uses the shared claude.ai database.
+   Anywhere else (a copy pulled from GitHub, opened from a computer or a web host) it saves:
+   - in this browser by default, or
+   - in a Google Sheet, once an Apps Script web app URL is connected on Budget & rules
+     (see google-sheet-backend.gs). Everyone connected to the same sheet shares one set of data. */
+const STORE_CFG_KEY="fbop:store",LOCAL_DATA_KEY="fbop:data";
+function storeCfg(){try{return JSON.parse(localStorage.getItem(STORE_CFG_KEY)||"null")||{}}catch(e){return {}}}
+function setStoreCfg(c){try{if(c)localStorage.setItem(STORE_CFG_KEY,JSON.stringify(c));else localStorage.removeItem(STORE_CFG_KEY);return true}catch(e){return false}}
+function storeErr(code){const e=new Error(code);e.code=code;return e}
+const SHEET_URL_RE=/^https:\/\/script\.google(usercontent)?\.com\//;
+async function sheetCall(cfg,body){
+  let r;try{r=await fetch(cfg.url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({key:cfg.key||""},body))})}catch(e){throw storeErr("unavailable")}
+  let j;try{j=await r.json()}catch(e){throw storeErr("bad_response")}
+  if(!j||!j.ok)throw storeErr((j&&j.error)||"sheet_error");
+  return j;
+}
+function readLocalData(){try{return JSON.parse(localStorage.getItem(LOCAL_DATA_KEY)||"{}")||{}}catch(e){return {}}}
+function makeStore(){
+  const cfg=storeCfg();const sheet=cfg.url&&SHEET_URL_RE.test(cfg.url)?cfg:null;
+  let docs={};const listeners=new Set();
+  const clone=d=>JSON.parse(JSON.stringify(d));
+  const notify=()=>listeners.forEach(fn=>{try{fn()}catch(e){}});
+  function persistLocal(){try{localStorage.setItem(LOCAL_DATA_KEY,JSON.stringify(docs))}catch(e){throw storeErr(/quota/i.test((e.name||"")+(e.message||""))?"quota_exceeded":"storage_unavailable")}}
+  async function write(path,data){
+    const had=path in docs,prev=docs[path];
+    if(data==null)delete docs[path];else docs[path]=data;
+    try{if(sheet)await sheetCall(sheet,{op:data==null?"delete":"set",path,data});else persistLocal()}
+    catch(e){if(had)docs[path]=prev;else delete docs[path];notify();throw e}
+    notify();
+  }
+  async function refresh(){
+    if(!sheet){docs=readLocalData();return}
+    const j=await sheetCall(sheet,{op:"all"});const next=j.docs||{};
+    if(JSON.stringify(next)!==JSON.stringify(docs)){docs=next;notify()}
+  }
+  const ready=refresh();
+  if(sheet)setInterval(()=>{if(!document.hidden)refresh().catch(()=>{})},30000);
+  if(!sheet)window.addEventListener("storage",e=>{if(e.key===LOCAL_DATA_KEY){docs=readLocalData();notify()}});
+  function collDocs(name,order,lim){
+    const pre=name+"/";
+    let list=Object.keys(docs).filter(p=>p.startsWith(pre)&&!p.slice(pre.length).includes("/")).map(p=>({id:p.slice(pre.length),_d:docs[p],data:()=>docs[p]}));
+    if(order){const [f,dir]=order;list.sort((a,b)=>{const x=a._d[f],y=b._d[f];return (x<y?-1:x>y?1:0)*(dir==="desc"?-1:1)})}
+    if(lim)list=list.slice(0,lim);
+    return {docs:list,size:list.length,empty:!list.length};
+  }
+  function listen(fn,onErr){listeners.add(fn);ready.then(fn,e=>onErr&&onErr(e));return ()=>listeners.delete(fn)}
+  return {
+    mode:sheet?"sheet":"browser",ready,
+    doc(path){return {
+      onSnapshot:(cb,onErr)=>listen(()=>cb({exists:path in docs,id:path.split("/").pop(),data:()=>docs[path]}),onErr),
+      set:d=>write(path,clone(d)),
+      update:p=>path in docs?write(path,Object.assign({},docs[path],clone(p))):Promise.reject(storeErr("not_found")),
+      delete:()=>write(path,null)}},
+    collection(name){const q={order:null,lim:0};const c={
+      orderBy(f,dir){q.order=[f,dir||"asc"];return c},
+      limit(n){q.lim=n;return c},
+      onSnapshot:(cb,onErr)=>listen(()=>cb(collDocs(name,q.order,q.lim)),onErr),
+      async add(d){const id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);await write(name+"/"+id,clone(d));return {id}}};return c},
+    exportAll:()=>clone(docs),
+    async importAll(obj){
+      if(sheet)await sheetCall(sheet,{op:"import",docs:obj});
+      else{const old=docs;docs=clone(obj);try{persistLocal()}catch(e){docs=old;throw e}}
+      docs=clone(obj);notify();
+    }
+  };
+}
+function fallbackDownloads(){return {async save({filename,data}){
+  const blob=data instanceof Blob?data:new Blob([data],{type:"text/plain;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
+}}}
+
 /* ---------- capabilities ---------- */
 async function boot(){
   window.addEventListener("hashchange",route);route();
@@ -444,7 +517,9 @@ async function boot(){
   try{S.assets=await window.claude?.use?.("assets")}catch(e){S.assets=null}
   try{S.sample=await window.claude?.use?.("sample")}catch(e){S.sample=null}
   let db=null;try{db=await window.claude?.use?.("db")}catch(e){db=null}
-  if(!db){clearTimeout(timer);S.dbState="none";render();return}
+  if(db)S.storeMode="claude";
+  else{db=makeStore();S.storeMode=db.mode}
+  if(!S.downloads)S.downloads=fallbackDownloads();
   S.db=db;
   let got=new Set();const ready=k=>{got.add(k);if(got.size>=4&&S.dbState!=="ready"){clearTimeout(timer);S.dbState="ready"}rebuild()};
   const fail=e=>{clearTimeout(timer);S.dbState="error";S.dbErr=e&&e.code;render()};
@@ -582,8 +657,50 @@ function freshLine(){
 function banner(){
   if(S.dbState==="none")return `<div class="notice">This copy can’t reach the shared data, so uploads and edits stay on this screen only. Open the planner in claude.ai to save them for the team.</div>`;
   if(S.dbState==="slow")return `<div class="notice">The shared data hasn’t loaded yet. Numbers may be missing or out of date.</div>`;
-  if(S.dbState==="error")return `<div class="notice err">The shared data stopped responding. Reload the page to reconnect.</div>`;
+  if(S.dbState==="error")return S.storeMode==="sheet"
+    ?`<div class="notice err">Can’t reach the Google Sheet${S.dbErr==="not_granted"?" (the access key doesn’t match)":""}. Check the connection on <a href="#setup">Budget &amp; rules</a>, then reload.</div>`
+    :`<div class="notice err">The shared data stopped responding. Reload the page to reconnect.</div>`;
+  if(S.storeMode==="browser")return `<div class="notice small">Saving in this browser only. To share one set of data with the team, connect a Google Sheet on <a href="#setup">Budget &amp; rules</a>.</div>`;
   return "";
+}
+function storageSection(){
+  if(S.storeMode==="claude")return `<section class="panel" style="margin-top:26px;max-width:760px"><h3>Where data is saved</h3><p class="small" style="margin:0">In the shared claude.ai database. Everyone with the link sees the same data.</p></section>`;
+  const cfg=storeCfg();const sheet=S.storeMode==="sheet";
+  return `<section class="panel" style="margin-top:26px;max-width:760px"><h3>Where data is saved</h3>
+    <p class="small" style="margin:0 0 12px">${sheet?`<b>Google Sheet.</b> Everyone connected to the same sheet shares the same uploads, vendor details, invoices and rules. Changes from others show up within 30 seconds.`:`<b>This browser only.</b> Data stays on this computer, in this browser. Connect a Google Sheet so the whole team shares one set of data.`}</p>
+    <form id="storeform" class="vgrid" style="grid-template-columns:1fr 200px">
+      <label>Apps Script web app URL<input name="url" type="url" value="${esc(cfg.url||"")}" placeholder="https://script.google.com/macros/s/…/exec" ${sheet?"readonly":""}></label>
+      <label>Access key<input name="key" type="password" value="${esc(cfg.key||"")}" placeholder="The key in the script" ${sheet?"readonly":""}></label>
+    </form>
+    <p class="btnrow">${sheet?`<button class="btn" id="storedisc">Disconnect</button>`:`<button class="btn primary" id="storeconn">Connect Google Sheet</button>`}
+      <button class="btn" id="storebackup">Download backup</button>
+      <label class="btn" style="margin:0">Restore from backup<input type="file" id="storerestore" accept=".json,application/json" hidden></label></p>
+    <p class="small muted" style="margin:0">Setup steps are in the README on GitHub. A backup is one .json file with everything, which you can restore into a browser or a Google Sheet.${S.storeMode!=="claude"?" Invoice PDFs are only stored on claude.ai, so here only the invoice details are saved.":""}</p>
+  </section>`;
+}
+async function connectSheet(){
+  const f=new FormData($("#storeform"));const url=String(f.get("url")||"").trim(),key=String(f.get("key")||"");
+  if(!SHEET_URL_RE.test(url)){toast("Paste the Apps Script web app URL (script.google.com)");return}
+  let remote;try{remote=(await sheetCall({url,key},{op:"all"})).docs||{}}catch(e){toast(e.code==="not_granted"?"The access key doesn’t match the script":"Couldn’t reach that Apps Script. Check the URL and deployment.");return}
+  const local=readLocalData();
+  if(!Object.keys(remote).length&&Object.keys(local).length&&confirm("The Google Sheet is empty. Copy the data saved in this browser into it?")){
+    try{await sheetCall({url,key},{op:"import",docs:local})}catch(e){toast("Couldn’t copy the data. Try again.");return}
+  }
+  if(!setStoreCfg({url,key})){toast("This browser won’t save settings");return}
+  location.reload();
+}
+async function backupData(){
+  const data=S.storeMode==="claude"?null:S.db.exportAll();
+  if(!data){toast("Backups are for copies outside claude.ai");return}
+  await S.downloads.save({filename:`Firebrand_Ordering_Backup_${todayISO()}.json`,data:new Blob([JSON.stringify(data)],{type:"application/json"})});
+}
+function restoreData(file){
+  const r=new FileReader();
+  r.onload=async()=>{let obj;try{obj=JSON.parse(r.result)}catch(e){toast("That isn’t a planner backup file");return}
+    if(!obj||typeof obj!=="object"||Array.isArray(obj)){toast("That isn’t a planner backup file");return}
+    if(!confirm(`Replace everything saved ${S.storeMode==="sheet"?"in the Google Sheet":"in this browser"} with this backup?`))return;
+    try{await S.db.importAll(obj);toast("Backup restored")}catch(e){toast(e.code==="quota_exceeded"?"This browser is out of space":"Couldn’t restore. Try again.")}};
+  r.readAsText(file);
 }
 function emptyState(){return `${banner()}<h2>No order report yet</h2><p class="lede">Upload the Dutchie Inventory Order Report to see this week’s vendor POs, stockouts and overstock.</p><a class="btn primary" href="#upload">Upload the order report</a>`}
 
@@ -715,6 +832,7 @@ function viewSetup(){
     <p class="muted small" style="margin:0">Monthly budget right now: ${money(mb*s.floorPct)} to ${money(mb*s.ceilPct)}, or ${money(mb*s.floorPct/4)} to ${money(mb*s.ceilPct/4)} a week.</p>
     <div><button class="btn primary" type="submit">Save rules</button></div>
   </form>
+  ${storageSection()}
   <section class="panel" style="margin-top:26px;max-width:760px"><h3>The rules</h3><ol>
     <li>Every order starts here, not from the shelves or a vendor’s suggested order.</li>
     <li>Each vendor is ordered once a month in its assigned week. The biggest vendors are ordered twice a month.</li>
@@ -1041,6 +1159,9 @@ document.addEventListener("click",e=>{
   const po=e.target.closest("[data-po]");if(po){const v=S.model.vendors.find(x=>x.key===po.dataset.po);if(v)downloadPO(v);return}
   if(e.target.id==="savep"&&S.parsed){const d=$("#pdays");if(d)S.parsed.meta.days=Math.max(1,+d.value||30);saveReport(S.parsed);return}
   if(e.target.id==="cancelp"){S.parsed=null;render()}
+  if(e.target.id==="storeconn"){connectSheet();return}
+  if(e.target.id==="storedisc"){if(confirm("Disconnect the Google Sheet? This browser goes back to its own saved data. Nothing in the sheet is deleted.")){setStoreCfg(null);location.reload()}return}
+  if(e.target.id==="storebackup"){backupData();return}
 });
 document.addEventListener("keydown",e=>{const tg=e.target.closest&&e.target.closest("[data-toggle]");if(tg&&e.target===tg&&(e.key==="Enter"||e.key===" ")){e.preventDefault();S.open=S.open===tg.dataset.toggle?null:tg.dataset.toggle;render()}});
 document.addEventListener("input",e=>{
@@ -1058,12 +1179,14 @@ document.addEventListener("change",e=>{
     saveVendor(v.key,v.name,patch);return}
   if(t.dataset.keep){saveBrand(t.dataset.keep,t.value);return}
   if(t.id==="file"&&t.files[0])readFile(t.files[0]);
+  if(t.id==="storerestore"&&t.files[0]){restoreData(t.files[0]);t.value=""}
   if(t.id==="invfile"&&t.files.length)ingestFiles(t.files);
   if(t.id&&t.id.startsWith("invf-")){S.invF[t.id.slice(5)]=t.value;S.invOpen=null;render()}
 });
 document.addEventListener("submit",e=>{
   if(e.target.id==="ingestform"){e.preventDefault();saveIngest(e.target);return}
   if(e.target.classList.contains("invedit")){e.preventDefault();saveInvEdit(e.target);return}
+  if(e.target.id==="storeform"){e.preventDefault();if(S.storeMode==="browser")connectSheet();return}
   if(e.target.id!=="setform")return;e.preventDefault();const f=new FormData(e.target);const g=k=>Number(f.get(k));
   saveSettings({lastMonthSales:g("lastMonthSales"),floorPct:g("floorPct")/100,ceilPct:g("ceilPct")/100,leadDefault:g("leadDefault"),overDays:g("overDays"),
     reviewMonthly:g("reviewMonthly"),reviewTwice:g("reviewTwice"),tiers:{A:{safety:g("safA")},B:{safety:g("safB")},C:{safety:g("safC")}}});

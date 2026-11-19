@@ -2,6 +2,18 @@
 
 Every change to the planner gets an entry here: what changed and why. Newest first.
 
+## 2026-11-19: Saving outside claude.ai
+
+**What changed**
+- Copies opened outside claude.ai now save in the browser instead of losing everything on refresh.
+- Added an optional Google Sheet connection (`google-sheet-backend.gs`) so every copy can share one set of data in Firebrand's Drive.
+- Added "Where data is saved" to Budget & rules, with Connect / Disconnect, Download backup and Restore from backup.
+- PO files and invoice exports now download in any browser, not just on claude.ai.
+- On claude.ai nothing changes: it still uses the shared claude.ai database.
+
+**Why**
+- Anyone who pulls the code from GitHub needs their uploads, vendor details and invoices to be saved wherever they run it.
+
 ## 2026-11-19: Moved into GitHub
 
 **What changed**
