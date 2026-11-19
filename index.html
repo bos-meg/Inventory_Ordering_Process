@@ -1,0 +1,1083 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Firebrand Ordering Planner</title>
+<meta name="theme-color" content="#000000">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#F2F2EF; --surface:#FFFFFF; --surface-2:#F7F7F4; --ink:#141414; --muted:#5F5F5A; --line:#DEDED8;
+  --head:#000000; --head-ink:#FFFFFF; --yellow:#FFD200; --on-yellow:#000000;
+  --ember:#C8102E; --ember-soft:#FBE1E4; --sky:#2E5B87; --sky-soft:#E0E9F2;
+  --ok:#2E6B45; --ok-soft:#E1F0E6; --amber:#8A5300; --amber-soft:#FCEBCF;
+  --band:#FFE97A; --order:#FFD200; --order-ink:#000000;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+  --bg:#0E0E0E; --surface:#181818; --surface-2:#202020; --ink:#F2F2EF; --muted:#A3A39C; --line:#2E2E2E;
+  --head:#000000; --head-ink:#FFFFFF; --yellow:#FFD200; --on-yellow:#000000;
+  --ember:#FF5A6E; --ember-soft:#3A1219; --sky:#8DB8E3; --sky-soft:#17263A;
+  --ok:#7CCB97; --ok-soft:#14291B; --amber:#F2B04C; --amber-soft:#33240C;
+  --band:#4A3F00; --order:#FFD200; --order-ink:#000000;
+  color-scheme: dark;
+}
+}
+:root[data-theme="dark"]{
+  --bg:#0E0E0E; --surface:#181818; --surface-2:#202020; --ink:#F2F2EF; --muted:#A3A39C; --line:#2E2E2E;
+  --head:#000000; --head-ink:#FFFFFF; --yellow:#FFD200; --on-yellow:#000000;
+  --ember:#FF5A6E; --ember-soft:#3A1219; --sky:#8DB8E3; --sky-soft:#17263A;
+  --ok:#7CCB97; --ok-soft:#14291B; --amber:#F2B04C; --amber-soft:#33240C;
+  --band:#4A3F00; --order:#FFD200; --order-ink:#000000;
+  color-scheme: dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Archivo",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.45;font-variant-numeric:tabular-nums}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--head)}
+a{color:inherit}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px 64px}
+header.top{background:var(--head);color:var(--head-ink);border-bottom:6px solid var(--yellow)}
+header.top .wrap{padding-top:22px;padding-bottom:0}
+.brandline{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.mark{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.word{font-stretch:62%;font-weight:800;font-size:clamp(40px,7vw,64px);line-height:.9;color:var(--yellow);letter-spacing:.005em}
+.home{font-size:13.5px;font-weight:600;color:var(--head-ink);opacity:.8}
+h1{font-stretch:75%;font-weight:700;font-size:clamp(20px,3vw,26px);line-height:1.1;margin:8px 0 0;color:var(--head-ink)}
+.fresh{font-size:13.5px;opacity:.85;margin:8px 0 0}
+.fresh.stale{opacity:1;color:var(--yellow)}
+nav.tabs{display:flex;gap:2px;margin-top:20px;overflow-x:auto;scrollbar-width:none}
+nav.tabs a{padding:10px 14px 12px;text-decoration:none;font-weight:600;font-size:14px;border-radius:8px 8px 0 0;white-space:nowrap;opacity:.78}
+nav.tabs a[aria-current="page"]{background:var(--yellow);color:var(--on-yellow);opacity:1}
+nav.tabs a:hover{opacity:1}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);padding:8px 14px;border-radius:8px;font-weight:600;font-size:14px;cursor:pointer}
+.btn.primary{background:var(--yellow);border-color:var(--yellow);color:var(--on-yellow)}
+.btn.primary:hover{background:#000;color:var(--yellow);border-color:#000}
+.btn.light{background:var(--yellow);border-color:var(--yellow);color:var(--on-yellow);text-decoration:none}
+.btn:disabled{opacity:.5;cursor:default}
+main{padding-top:26px}
+h2{font-stretch:80%;font-weight:750;font-size:24px;margin:0 0 4px}
+h3{font-size:16px;margin:0 0 8px;font-weight:700}
+p.lede{color:var(--muted);margin:0 0 18px;max-width:72ch}
+.notice{background:var(--amber-soft);border-left:4px solid var(--amber);padding:12px 14px;border-radius:6px;margin:0 0 18px;max-width:900px}
+.notice.err{background:var(--ember-soft);border-color:var(--ember)}
+
+/* budget gauge */
+.gauge{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:22px}
+.gauge .nums{display:flex;flex-wrap:wrap;gap:8px 28px;align-items:baseline;margin-bottom:14px}
+.gauge .big{font-stretch:75%;font-weight:800;font-size:40px;line-height:1}
+.gauge .sub{color:var(--muted);font-size:14px}
+.track{position:relative;height:18px;background:var(--surface-2);border-radius:9px;overflow:hidden;border:1px solid var(--line)}
+.track .bandz{position:absolute;top:0;bottom:0;background:var(--band)}
+.track .fill{position:absolute;left:0;top:4px;bottom:4px;border-radius:5px;background:var(--ink)}
+.track .fill.over{background:var(--ember)}
+.day header{border-top:5px solid var(--yellow);border-radius:12px 12px 0 0}
+.scale{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-top:6px;position:relative;height:16px}
+.scale span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+
+/* day board */
+.board{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media (max-width:820px){.board{grid-template-columns:1fr}}
+.day{background:var(--surface);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.day header{padding:14px 16px 10px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline}
+.day .dname{font-stretch:68%;font-weight:800;font-size:30px;line-height:1}
+.day .dsum{text-align:right;font-weight:700}
+.day .dsum small{display:block;font-weight:400;color:var(--muted);font-size:12.5px}
+.day ul{list-style:none;margin:0;padding:6px 0}
+.day li button{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:9px 16px;cursor:pointer}
+.day li button:hover{background:var(--surface-2)}
+.day li button:focus-visible{outline:3px solid var(--yellow);outline-offset:-3px}
+.day .vn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.day .vamt{font-weight:700;text-align:right}
+.day .vmeta{grid-column:1/-1;font-size:12.5px;color:var(--muted)}
+.day .empty{padding:14px 16px;color:var(--muted);font-size:14px}
+.day .later{border-top:1px dashed var(--line);padding:10px 16px 14px;font-size:12.5px;color:var(--muted)}
+
+.alerts{margin-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:820px){.alerts{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.panel ol,.panel ul{margin:0;padding-left:18px}
+.panel li{margin:3px 0}
+
+/* tables */
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.toolbar input[type=search]{flex:1 1 220px;max-width:340px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.chip{border:1px solid var(--line);background:var(--surface);padding:6px 12px;border-radius:999px;font-size:13.5px;cursor:pointer;font-weight:600}
+.chip[aria-pressed="true"]{background:var(--yellow);color:var(--on-yellow);border-color:var(--yellow)}
+.tablebox{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12.5px;color:var(--muted);font-weight:600;background:var(--surface-2);position:sticky;top:0;white-space:nowrap}
+td.n,th.n{text-align:right}
+tr:last-child td{border-bottom:0}
+tr.clickable{cursor:pointer}
+tr.clickable:hover td{background:var(--surface-2)}
+.status{display:inline-block;padding:2px 8px;border-radius:5px;font-size:12.5px;font-weight:700;white-space:nowrap}
+.s-order{background:var(--order);color:var(--order-ink)}
+.s-confirm{background:var(--amber-soft);color:var(--amber)}
+.s-over{background:var(--sky-soft);color:var(--sky)}
+.s-ok{color:var(--ok);background:var(--ok-soft)}
+.s-none{color:var(--muted);background:var(--surface-2)}
+.tier{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:5px;font-weight:800;font-size:12.5px;background:var(--surface-2);border:1px solid var(--line)}
+.tier.A{background:var(--yellow);color:var(--on-yellow);border-color:var(--yellow)}
+
+/* vendor detail */
+.vdetail td{background:var(--surface-2)}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:4px 0 16px}
+.vgrid label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted);font-weight:600}
+.vgrid input,.vgrid select{padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--surface);font-size:14px;color:var(--ink);font-weight:400}
+.flag{font-size:13px;font-weight:600}
+.flag.warn{color:var(--ember)}
+.skus{margin:4px 0 0 0;font-size:13px;color:var(--muted)}
+.skus b{color:var(--ink);font-weight:600}
+.inner{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+.inner table{font-size:13.5px}
+
+/* upload */
+.drop{display:block;cursor:pointer;border:2px dashed var(--line);border-radius:14px;background:var(--surface);padding:34px 20px;text-align:center;max-width:720px}
+.drop.hover{border-color:var(--ink);background:var(--band)}
+.drop strong{display:block;font-size:18px;margin-bottom:6px}
+.steps{max-width:720px;margin:20px 0}
+.steps li{margin:6px 0}
+.preview{max-width:720px;margin-top:18px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 18px;font-size:14.5px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;font-weight:600}
+.form{max-width:640px;display:grid;gap:14px}
+.form label{display:grid;grid-template-columns:1fr 160px;align-items:center;gap:12px}
+.form input{padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);text-align:right}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.guide{max-width:780px}
+.guide section{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin:0 0 16px}
+.guide h3{font-stretch:80%;font-size:21px;font-weight:750;margin:0 0 10px}
+.guide p,.guide li{max-width:68ch}
+.guide ol,.guide ul{padding-left:20px;margin:8px 0}
+.guide li{margin:6px 0}
+.terms{display:grid;grid-template-columns:minmax(120px,170px) 1fr;gap:12px 18px;margin:6px 0 0}
+.terms dt{font-weight:700}
+.terms dd{margin:0}
+@media (max-width:560px){.terms{grid-template-columns:1fr;gap:2px}.terms dd{margin-bottom:10px}}
+.math{background:var(--surface-2);border-left:5px solid var(--yellow);border-radius:6px;padding:12px 16px;margin:10px 0}
+.math div{display:flex;justify-content:space-between;gap:16px;padding:3px 0}
+.math div.tot{border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-weight:700}
+.howto{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.btnrow{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.btnrow a.btn{text-decoration:none}
+.otext{width:100%;max-width:640px;font:inherit;font-size:13.5px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);margin-top:8px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px}
+.kpis>div{display:flex;flex-direction:column;gap:2px}
+.kpis .k{font-size:12.5px;color:var(--muted);font-weight:600}
+.kpis .v{font-stretch:75%;font-weight:800;font-size:32px;line-height:1.05}
+.kpis .s{font-size:12.5px;color:var(--muted)}
+.btn.small{padding:5px 10px;font-size:13px}
+.trend{position:relative;display:flex;gap:6px;align-items:stretch;overflow-x:auto;padding-top:4px}
+.tcol{all:unset;cursor:pointer;flex:1 0 46px;display:flex;flex-direction:column;align-items:center;gap:2px;border-radius:6px;padding:0 2px}
+.tcol:focus-visible{outline:3px solid var(--yellow)}
+.tval{height:18px;font-size:11.5px;font-weight:700;color:var(--muted)}
+.tbar{height:130px;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.tbar span{display:block;width:70%;max-width:34px;background:var(--ink);border-radius:4px 4px 0 0;opacity:.35}
+.tbar span.over{background:var(--ember);opacity:.55}
+.tcol.on .tbar span{opacity:1}
+.tcol.on .tval{color:var(--ink)}
+.tlab{height:18px;font-size:12px;font-weight:600}
+.tcol.on .tlab{background:var(--yellow);color:var(--on-yellow);padding:0 6px;border-radius:4px}
+.tline{position:absolute;left:0;right:0;border-top:2px dashed var(--ember);pointer-events:none;opacity:.7}
+.hbars{display:grid;gap:8px}
+.hb{display:grid;grid-template-columns:minmax(110px,38%) 1fr auto;gap:10px;align-items:center;font-size:13.5px}
+.hbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.hbl small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+.hbt{height:12px;background:var(--surface-2);border-radius:6px;overflow:hidden}
+.hbf{display:block;height:100%;background:var(--yellow);border-right:2px solid var(--on-yellow)}
+.hbf.dim{background:var(--line);border-color:var(--line)}
+.hbv{font-weight:700;text-align:right;white-space:nowrap}
+.hbv small{font-weight:400;color:var(--muted);margin-left:6px}
+.ingest{border-left:5px solid var(--yellow)}
+.filters{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr)) auto;gap:12px;align-items:end;background:var(--surface);border:1px solid var(--line);border-top:5px solid var(--yellow);border-radius:12px;padding:14px 16px;margin:22px 0 16px}
+@media (max-width:820px){.filters{grid-template-columns:1fr 1fr}.factions{grid-column:1/-1}}
+.fsel{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.fsel select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font-size:14px;font-weight:600;min-width:0}
+.factions{display:flex;gap:8px;flex-wrap:wrap}
+.scope{margin:0 0 12px;font-stretch:80%;font-weight:750;font-size:18px}
+.linkish{all:unset;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.linkish:hover{text-decoration:underline}
+.linkish:focus-visible{outline:3px solid var(--yellow)}
+.vgrid input[type=date],.vgrid input[type=month]{min-height:36px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#000;color:var(--yellow);padding:10px 16px;border-radius:8px;font-weight:600;font-size:14px;z-index:20}
+@media (prefers-reduced-motion:no-preference){.track .fill{transition:width .4s ease}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brandline">
+      <div>
+        <div class="mark"><span class="word">FIREBRAND</span><span class="home">Home of Boston Cannabis</span></div>
+        <h1>Ordering planner</h1>
+        <p class="fresh" id="fresh">Loading the latest order report…</p>
+      </div>
+      <a class="btn light" href="#upload">Upload this week’s report</a>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="Sections">
+      <a href="#week">This week</a>
+      <a href="#vendors">Vendors</a>
+      <a href="#brands">Brands</a>
+      <a href="#overstock">Overstock</a>
+      <a href="#invoices">Invoices</a>
+      <a href="#upload">Upload</a>
+      <a href="#setup">Budget &amp; rules</a>
+      <a href="#guide">How it works</a>
+    </nav>
+  </div>
+</header>
+<div class="wrap"><main id="main" tabindex="-1"></main></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(function(){
+"use strict";
+const DAYS=["Monday","Tuesday","Wednesday"];
+
+const DEFAULT_SETTINGS={lastMonthSales:0,floorPct:0.35,ceilPct:0.45,leadDefault:7,overDays:60,reviewMonthly:28,reviewTwice:14,
+  tiers:{A:{safety:7},B:{safety:5},C:{safety:3}}};
+
+const S={invoices:[],ingest:null,invF:null,invFilter:"All",invQuery:"",invOpen:null,assets:null,sample:null,db:null,user:null,downloads:null,dbState:"loading",
+  settings:null,vendors:{},vendorVer:{},brandprefs:{},reportDocs:{},history:[],
+  rows:null,meta:null,local:null,model:null,
+  route:"week",open:null,brandFilter:"ORDER",brandQuery:"",vendorQuery:"",parsed:null,saving:false};
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money=n=>(n<0?"−":"")+"$"+Math.round(Math.abs(n||0)).toLocaleString("en-US");
+const num=(n,d=0)=>(n==null||!isFinite(n))?"–":Number(n).toLocaleString("en-US",{maximumFractionDigits:d,minimumFractionDigits:d});
+const slug=s=>(String(s||"none").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,120))||"none";
+const fmtDate=d=>d?new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric"}):"";
+function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2600)}
+function settings(){const s=Object.assign({},DEFAULT_SETTINGS,S.settings||{});const t=(S.settings||{}).tiers||{};s.tiers={};["A","B","C"].forEach(k=>s.tiers[k]={safety:(t[k]&&t[k].safety!=null)?t[k].safety:DEFAULT_SETTINGS.tiers[k].safety});return s}
+
+/* ---------- week logic ---------- */
+function weekInfo(d=new Date()){
+  const mon=new Date(d.getFullYear(),d.getMonth(),d.getDate()-((d.getDay()+6)%7));
+  const wom=Math.ceil(mon.getDate()/7);
+  return {mon,wom};
+}
+function vWeeks(v){const w=Math.min(4,Math.max(1,+v.week||1));return v.freq==="Twice a month"?[w>2?w-2:w,w>2?w:w+2]:[w]}
+function isDueV(v,wom){return wom<=4&&vWeeks(v).includes(wom)}
+function weeksUntil(v,wom){const ws=vWeeks(v);const {mon}=weekInfo();for(let k=1;k<=10;k++){const d=new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+7*k);const w=Math.ceil(d.getDate()/7);if(w<=4&&ws.includes(w))return k}return 4}
+function schedText(v){const ws=vWeeks(v);return (ws.length>1?`Weeks ${ws[0]} & ${ws[1]}`:`Week ${ws[0]}`)+", "+v.day}
+function nextDueText(v,wom){const k=weeksUntil(v,wom);return k===1?"next week":`in ${k} weeks`}
+
+/* ---------- parse Dutchie order report ---------- */
+function parseDateCell(v){
+  if(v instanceof Date)return v;
+  if(typeof v==="number")return new Date(Math.round((v-25569)*864e5));
+  const m=String(v||"").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})\s*(AM|PM)?)?/i);
+  if(!m)return null;
+  let h=+(m[4]||0);if(m[6]){if(/pm/i.test(m[6])&&h<12)h+=12;if(/am/i.test(m[6])&&h===12)h=0}
+  return new Date(+m[3],+m[1]-1,+m[2],h,+(m[5]||0));
+}
+function parseReport(buf,fileName){
+  if(!window.XLSX)throw new Error("The spreadsheet reader didn’t load. Check your connection and reload the page.");
+  const wb=XLSX.read(buf,{type:"array",cellDates:true});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""});
+  let h=-1,from=null,to=null;
+  for(let i=0;i<Math.min(rows.length,40);i++){
+    const r=rows[i].map(x=>String(x).trim());
+    if(/^from date/i.test(r[0]))from=parseDateCell(rows[i][1]);
+    if(/^to date/i.test(r[0]))to=parseDateCell(rows[i][1]);
+    if(r.includes("Product Sku")&&r.includes("Quantity Sold")){h=i;break}
+  }
+  if(h<0)throw new Error("This doesn’t look like the Dutchie Inventory Order Report. It needs the Product Sku and Quantity Sold columns.");
+  const head=rows[h].map(x=>String(x).trim());
+  const need=["Product Sku","Product Name","Master Category","Category","Quantity on Hand","Price","Quantity Sold","Days Since Last Received","Last Wholesale Cost","Last Ordered Quantity","Brand","Vendor"];
+  const miss=need.filter(c=>!head.includes(c));
+  if(miss.length)throw new Error("The report is missing these columns: "+miss.join(", ")+".");
+  const ix={};need.forEach(c=>ix[c]=head.indexOf(c));
+  const by=new Map();
+  for(let i=h+1;i<rows.length;i++){
+    const r=rows[i];const sku=String(r[ix["Product Sku"]]).trim();if(!sku)continue;
+    const n=v=>{const x=Number(v);return isFinite(x)?x:0};
+    const rec={sku,name:String(r[ix["Product Name"]]).trim(),cat:String(r[ix["Master Category"]]).trim()||"Other",sub:String(r[ix["Category"]]).trim(),
+      oh:n(r[ix["Quantity on Hand"]]),price:n(r[ix["Price"]]),sold:n(r[ix["Quantity Sold"]]),
+      dslr:r[ix["Days Since Last Received"]]===""?null:n(r[ix["Days Since Last Received"]]),
+      cost:n(r[ix["Last Wholesale Cost"]]),lastq:n(r[ix["Last Ordered Quantity"]]),
+      brand:String(r[ix["Brand"]]).trim(),vendor:String(r[ix["Vendor"]]).trim()};
+    const p=by.get(sku);
+    if(!p)by.set(sku,rec);
+    else{p.oh=Math.max(p.oh,rec.oh);p.sold=Math.max(p.sold,rec.sold);p.cost=Math.max(p.cost,rec.cost);p.lastq=Math.max(p.lastq,rec.lastq);
+      if(rec.dslr!=null)p.dslr=p.dslr==null?rec.dslr:Math.min(p.dslr,rec.dslr);if(!p.brand)p.brand=rec.brand;if(!p.vendor)p.vendor=rec.vendor}
+  }
+  const out=[];
+  for(const r of by.values()){
+    if(r.sold<=0&&r.oh<=0)continue;
+    const vendor=r.vendor||"(no vendor)";const brand=r.brand||vendor;
+    let uc=r.lastq>0?r.cost/r.lastq:0;if(!(uc>0&&uc<r.price*1.2))uc=r.price*0.5;
+    out.push([r.sku,r.name,brand,vendor,r.cat,r.sub,r.oh,r.sold,Math.round(r.price*100)/100,Math.round(uc*100)/100,r.dslr]);
+  }
+  let days=from&&to?Math.max(1,Math.round((to-from)/864e5)):null;
+  return {rows:out,meta:{from:from?from.toISOString():null,to:to?to.toISOString():null,days,fileName,skuCount:out.length}};
+}
+
+/* ---------- planning model ---------- */
+function compute(rows,meta){
+  const st=settings();const days=meta.days||30;
+  const brands=new Map();
+  const skus=rows.map(r=>({sku:r[0],name:r[1],brand:r[2],vendor:r[3],cat:r[4],sub:r[5],oh:r[6],sold:r[7],price:r[8],uc:r[9],dslr:r[10],upd:r[7]/days}));
+  for(const k of skus){
+    const lk=k.brand+"\u0001"+k.vendor;let b=brands.get(lk);
+    if(!b){b={name:k.brand,skus:[],oh:0,sold:0,rev:0,costSold:0,ucSum:0,dslr:null,vcount:{},catRev:{}};brands.set(lk,b)}
+    b.skus.push(k);b.oh+=k.oh;b.sold+=k.sold;b.rev+=k.sold*k.price;b.costSold+=k.sold*k.uc;b.ucSum+=k.uc;
+    b.vcount[k.vendor]=(b.vcount[k.vendor]||0)+1;b.catRev[k.cat]=(b.catRev[k.cat]||0)+k.sold*k.price+0.0001;
+    if(k.dslr!=null)b.dslr=b.dslr==null?k.dslr:Math.min(b.dslr,k.dslr);
+  }
+  const list=[...brands.values()];
+  const nv={};list.forEach(b=>{nv[b.name]=(nv[b.name]||0)+1});
+  const total=list.reduce((a,b)=>a+b.rev,0)||1;
+  list.sort((a,b)=>b.rev-a.rev);
+  let cum=0;
+  for(const b of list){
+    b.vendor=Object.keys(b.vcount)[0];b.label=nv[b.name]>1?`${b.name} (from ${b.vendor})`:b.name;
+    b.cat=Object.entries(b.catRev).sort((x,y)=>y[1]-x[1])[0][0];
+    b.tier=b.sold<=0?"C":(cum<0.80?"A":cum<0.95?"B":"C");cum+=b.rev/total;
+    b.upd=b.sold/days;b.uc=b.sold>0?b.costSold/b.sold:b.ucSum/b.skus.length;
+    b.monthly=b.upd*b.uc*30;
+  }
+  const vmap=new Map();
+  for(const b of list){let v=vmap.get(b.vendor);if(!v){v={name:b.vendor,key:slug(b.vendor),brands:[]};vmap.set(b.vendor,v)}v.brands.push(b)}
+  const tierRank={A:0,B:1,C:2};
+  const vlist=[...vmap.values()];
+  const wload={1:0,2:0,3:0,4:0};const dload={};
+  for(const v of vlist){
+    const saved=S.vendors[v.key]||{};
+    v.tier=v.brands.reduce((t,b)=>tierRank[b.tier]<tierRank[t]?b.tier:t,"C");
+    v.monthly=v.brands.reduce((a,b)=>a+b.monthly,0);
+    v.lead=Number(saved.lead)>0?Number(saved.lead):st.leadDefault;v.leadSet=Number(saved.lead)>0;
+    v.moq=Number(saved.moq)||0;v.nextDay=saved.nextDay||"";v.notes=saved.notes||"";
+    v.method=saved.method||"";v.orderLink=saved.orderLink||"";v.rep=saved.rep||"";v.phone=saved.phone||"";v.email=saved.email||"";v.folder=saved.folder||"";
+    v.freq=saved.freq==="Twice a month"?"Twice a month":"Monthly";
+    v.week=[1,2,3,4].includes(+saved.week)?+saved.week:null;
+    v.day=DAYS.includes(saved.day)?saved.day:null;
+    if(v.week)vWeeks(v).forEach(w=>{wload[w]+=v.monthly/vWeeks(v).length;const k=w+v.day;if(v.day)dload[k]=(dload[k]||0)+v.monthly/vWeeks(v).length});
+  }
+  for(const v of vlist.filter(v=>!v.week).sort((a,b)=>b.monthly-a.monthly)){
+    v.week=[1,2,3,4].reduce((m,w)=>wload[w]<wload[m]?w:m,1);v.schedSuggested=true;wload[v.week]+=v.monthly;
+  }
+  for(const v of vlist.filter(v=>!v.day)){
+    const w=vWeeks(v)[0];v.day=DAYS.reduce((m,d)=>(dload[w+d]||0)<(dload[w+m]||0)?d:m,"Monday");v.schedSuggested=true;dload[w+v.day]=(dload[w+v.day]||0)+v.monthly;
+  }
+  const {wom}=weekInfo();
+  for(const v of vlist){
+    const review=v.freq==="Twice a month"?st.reviewTwice:st.reviewMonthly;
+    v.due=isDueV(v,wom);v.cadence=v.freq;v.review=review;
+    const untilDays=v.due?0:weeksUntil(v,wom)*7;
+    v.po=0;v.confirm=0;v.nOrder=0;v.nOver=0;v.ohCost=0;v.topups=[];
+    for(const b of v.brands){
+      const safety=(st.tiers[b.tier]||st.tiers.C).safety;
+      const pref=S.brandprefs[slug(b.name)]||{};
+      b.keepAuto=(b.oh<=0&&(b.dslr==null||b.dslr>60))?"Review":"Y";
+      b.keep=pref.keep||b.keepAuto;
+      b.lead=v.lead;b.review=review;b.safety=safety;b.vendorObj=v;
+      b.dos=b.upd>0?b.oh/b.upd:null;
+      b.out=b.upd>0?Math.ceil(b.upd*(v.lead+review+safety)):0;
+      b.rop=b.upd>0?Math.ceil(b.upd*(v.lead+safety)):0;
+      const need=Math.max(0,b.out-b.oh);
+      if(b.keep==="N")b.status="Dropped";
+      else if(b.upd<=0)b.status=b.oh>0?"No recent sales":"Dropped";
+      else if(b.dos>st.overDays)b.status="Overstocked";
+      else if(need>0&&need>=0.15*b.out)b.status=b.keep==="Review"?"Confirm, then order":"ORDER";
+      else b.status="OK";
+      b.sugg=(b.status==="ORDER"||b.status==="Confirm, then order")?need:0;
+      b.suggCost=b.sugg*b.uc;b.ohCost=b.oh*b.uc;
+      b.excess=b.status==="Overstocked"?Math.max(0,b.oh-b.upd*st.overDays)*b.uc:(b.status==="No recent sales"?b.ohCost:0);
+      // top-up: top brand that will run out before this vendor's next scheduled delivery
+      b.topup=0;
+      if(!v.due&&b.tier==="A"&&b.keep!=="N"&&b.upd>0&&b.dos<untilDays){
+        b.topup=Math.max(0,Math.ceil(b.upd*(untilDays+v.lead))-b.oh);
+        if(b.topup>0)v.topups.push(b);
+      }
+      b.picks=allocate(b,b.sugg,v.lead+review+safety);
+      b.topPicks=b.topup>0?allocate(b,b.topup,untilDays+v.lead):[];
+      if(b.status==="ORDER"){v.po+=b.suggCost;v.nOrder++}
+      if(b.status==="Confirm, then order")v.confirm+=b.suggCost;
+      if(b.status==="Overstocked")v.nOver++;
+      v.ohCost+=b.ohCost;
+    }
+    v.topupCost=v.topups.reduce((a,b)=>a+b.topup*b.uc,0);
+    v.moqCheck=v.po<=0?"":(!v.moq?"Get MOQ from Juan":v.po>=v.moq?"Meets MOQ":"Below MOQ, hold or add");
+    v.deliveryCheck=v.nextDay==="Y"&&v.day==="Wednesday"?"Would land Thursday, move to Mon or Tue":(v.nextDay===""?"Next-day? Ask Juan":"");
+  }
+  const monthB={floor:st.lastMonthSales*st.floorPct,ceil:st.lastMonthSales*st.ceilPct};
+  const budget={floor:monthB.floor/4,ceil:monthB.ceil/4};
+  const dueVendors=vlist.filter(v=>v.due);
+  const weekPO=dueVendors.reduce((a,v)=>a+v.po,0);
+  const topupTotal=vlist.reduce((a,v)=>a+v.topupCost,0);
+  const monthPlan=vlist.reduce((a,v)=>a+v.brands.filter(b=>!["Overstocked","Dropped","No recent sales"].includes(b.status)).reduce((x,b)=>x+b.monthly,0),0);
+  return {brands:list,vendors:vlist,budget,monthB,weekPO,topupTotal,monthPlan,wom,days,st};
+}
+function allocate(b,units,cover){
+  if(!(units>0))return [];
+  const sh=b.skus.map(k=>({k,need:Math.max(0,Math.ceil(k.upd*cover)-k.oh)})).filter(x=>x.need>0);
+  const tot=sh.reduce((a,x)=>a+x.need,0);if(!tot)return [];
+  const alloc=sh.map(x=>{const raw=units*x.need/tot;return {k:x.k,u:Math.floor(raw),f:raw-Math.floor(raw)}});
+  let rem=units-alloc.reduce((a,x)=>a+x.u,0);
+  alloc.slice().sort((a,c)=>c.f-a.f).forEach(x=>{if(rem>0){x.u++;rem--}});
+  return alloc.filter(x=>x.u>0).sort((a,c)=>c.k.upd-a.k.upd).map(x=>({sku:x.k.sku,name:x.k.name,units:x.u,oh:x.k.oh,upd:x.k.upd,uc:x.k.uc}));
+}
+
+/* ---------- capabilities ---------- */
+async function boot(){
+  window.addEventListener("hashchange",route);route();
+  const timer=setTimeout(()=>{if(S.dbState==="loading"){S.dbState="slow";render()}},10000);
+  try{S.downloads=await window.claude?.use?.("downloads")}catch(e){S.downloads=null}
+  try{S.user=await window.claude?.use?.("user")}catch(e){S.user=null}
+  try{S.assets=await window.claude?.use?.("assets")}catch(e){S.assets=null}
+  try{S.sample=await window.claude?.use?.("sample")}catch(e){S.sample=null}
+  let db=null;try{db=await window.claude?.use?.("db")}catch(e){db=null}
+  if(!db){clearTimeout(timer);S.dbState="none";render();return}
+  S.db=db;
+  let got=new Set();const ready=k=>{got.add(k);if(got.size>=4&&S.dbState!=="ready"){clearTimeout(timer);S.dbState="ready"}rebuild()};
+  const fail=e=>{clearTimeout(timer);S.dbState="error";S.dbErr=e&&e.code;render()};
+  db.doc("settings/main").onSnapshot(s=>{S.settings=s.exists?s.data():null;ready("s")},fail);
+  db.collection("vendors").onSnapshot(q=>{const o={};q.docs.forEach(d=>{o[d.id]=d.data()});S.vendors=o;ready("v")},fail);
+  db.collection("brandprefs").onSnapshot(q=>{const o={};q.docs.forEach(d=>{o[d.id]=d.data()});S.brandprefs=o;ready("b")},fail);
+  db.collection("report").onSnapshot(q=>{const o={};q.docs.forEach(d=>{o[d.id]=d.data()});S.reportDocs=o;assemble();ready("r")},fail);
+  db.collection("history").orderBy("at","desc").limit(12).onSnapshot(q=>{S.history=q.docs.map(d=>d.data());render()},()=>{});
+  db.collection("invoices").onSnapshot(q=>{S.invoices=q.docs.map(d=>Object.assign({id:d.id},d.data()));if(S.route==="invoices"&&!(document.activeElement&&document.activeElement.closest&&document.activeElement.closest("form")))render()},()=>{});
+}
+function assemble(){
+  const m=S.reportDocs.meta;if(!m||!m.chunks)return;
+  const rows=[];
+  for(let i=0;i<m.chunks;i++){const c=S.reportDocs["c"+i];if(!c||c.uploadId!==m.uploadId)return;rows.push(...c.rows)}
+  S.rows=rows;S.meta=m;
+}
+function rebuild(){
+  const src=S.local||(S.rows&&S.meta?{rows:S.rows,meta:S.meta}:null);
+  S.model=src?compute(src.rows,src.meta):null;render();
+}
+
+/* ---------- writes ---------- */
+async function saveVendor(key,name,patch){
+  if(!S.db){toast("Open this in claude.ai to save changes");return}
+  const body=Object.assign({name},S.vendors[key]||{},patch);
+  try{await S.db.doc("vendors/"+key).set(body);toast("Saved "+name)}catch(e){toast(e&&e.code==="quota_exceeded"?"Storage is full":"Couldn’t save. Try again.")}
+}
+async function saveBrand(name,keep){
+  if(!S.db){toast("Open this in claude.ai to save changes");return}
+  try{await S.db.doc("brandprefs/"+slug(name)).set({name,keep});toast("Saved "+name)}catch(e){toast("Couldn’t save. Try again.")}
+}
+async function saveReport(parsed){
+  if(!S.db){S.local=parsed;S.parsed=null;rebuild();toast("Loaded for this view only");location.hash="#week";return}
+  S.saving=true;render();
+  try{
+    const uploadId="u"+Date.now();
+    const chunks=[];let cur=[],size=0;
+    for(const r of parsed.rows){const s=JSON.stringify(r).length;if(size+s>170000&&cur.length){chunks.push(cur);cur=[];size=0}cur.push(r);size+=s}
+    if(cur.length)chunks.push(cur);
+    for(let i=0;i<chunks.length;i++)await S.db.doc("report/c"+i).set({uploadId,rows:chunks[i]});
+    for(const id of Object.keys(S.reportDocs)){const m=id.match(/^c(\d+)$/);if(m&&+m[1]>=chunks.length)await S.db.doc("report/"+id).delete()}
+    let by=null;try{by=S.user?await S.user.id():null}catch(e){}
+    const meta=Object.assign({},parsed.meta,{uploadId,chunks:chunks.length,uploadedAt:new Date().toISOString(),uploadedBy:by});
+    await S.db.doc("report/meta").set(meta);
+    const m=compute(parsed.rows,meta);
+    await S.db.doc("history/"+uploadId).set({at:meta.uploadedAt,from:meta.from,to:meta.to,days:meta.days,
+      po:Math.round(m.weekPO),ohCost:Math.round(m.brands.reduce((a,b)=>a+b.ohCost,0)),
+      overstock:Math.round(m.brands.reduce((a,b)=>a+b.excess,0)),stockouts:m.brands.filter(b=>b.tier==="A"&&b.oh<=0&&b.keep!=="N").length});
+    S.parsed=null;S.local=null;toast("Report saved. Everyone sees the new numbers.");location.hash="#week";
+  }catch(e){toast(e&&e.code==="quota_exceeded"?"Storage is full. Ask Megan to clear old data.":"Upload didn’t finish. Try again.")}
+  S.saving=false;render();
+}
+async function saveSettings(patch){
+  if(!S.db){toast("Open this in claude.ai to save changes");return}
+  const body=Object.assign({},settings(),patch);
+  try{await S.db.doc("settings/main").set(body);toast("Rules saved")}catch(e){toast("Couldn’t save. Try again.")}
+}
+function poItems(v){
+  const items=[];const topOnly=!v.due&&v.topups.length>0;
+  for(const b of v.brands){
+    const units=topOnly?b.topup:(b.status==="ORDER"?b.sugg:0);if(!units)continue;
+    const picks=topOnly?b.topPicks:b.picks;
+    if(picks.length)picks.forEach(p=>items.push({brand:b.name,sku:p.sku,name:p.name,units:p.units,uc:p.uc}));
+    else items.push({brand:b.name,sku:"",name:"Any active "+b.name+" items",units,uc:b.uc});
+  }
+  return {items,topOnly};
+}
+function emailText(v){
+  const {items,topOnly}=poItems(v);
+  const lines=[`Hi${v.rep?" "+v.rep.split(" ")[0]:""},`,"",`Here’s Firebrand Cannabis’s ${topOnly?"top-up ":""}order:`,""];
+  items.forEach(i=>lines.push(`${i.units} x ${i.name}`));
+  lines.push("","Please deliver Monday to Wednesday only.","","Thank you,","Firebrand Cannabis");
+  return lines.join("\n");
+}
+async function downloadPO(v){
+  const {items,topOnly}=poItems(v);
+  const today=new Date().toISOString().slice(0,10);
+  const aoa=[["Firebrand Cannabis "+(topOnly?"top-up order":"purchase order")],["Vendor",v.name],["Date",today],["Delivery window","Monday to Wednesday only"],[],
+    ["Brand","SKU","Product","Order units","Est. unit cost","Est. cost"]];
+  items.forEach(i=>aoa.push([i.brand,i.sku,i.name,i.units,Math.round(i.uc*100)/100,Math.round(i.units*i.uc*100)/100]));
+  aoa.push([],["","","Total",items.reduce((a,i)=>a+i.units,0),"",Math.round(items.reduce((a,i)=>a+i.units*i.uc,0)*100)/100]);
+  const base=(topOnly?"TopUp_":"PO_")+v.key+"_"+today;
+  let data,fname;
+  if(window.XLSX){const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=[{wch:22},{wch:12},{wch:52},{wch:12},{wch:13},{wch:12}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Order");
+    data=new Blob([XLSX.write(wb,{type:"array",bookType:"xlsx"})],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});fname=base+".xlsx"}
+  else{data=aoa.map(r=>r.map(x=>{x=String(x==null?"":x);return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x}).join(",")).join("\n");fname=base+".csv"}
+  if(!S.downloads){toast("Downloads aren’t available in this view");return}
+  try{await S.downloads.save({filename:fname,data})}catch(e){if(e&&e.code!=="declined"&&e.code!=="dismissed")toast("Couldn’t save the file")}
+}
+const METHODS=[["","Not set"],["Apex menu","Apex menu (online)"],["Excel order form","Excel order form"],["Email","Email the rep"],["PDF by email","PDF by email"],["Call or text","Call or text the rep"]];
+function safeUrl(u){return /^https?:\/\//i.test(u||"")?u:""}
+function howToOrder(v){
+  const m=v.method;const link=safeUrl(v.orderLink);const folder=safeUrl(v.folder);const has=v.po>0||v.topups.length;
+  const subj=encodeURIComponent("Firebrand Cannabis order "+new Date().toLocaleDateString("en-US"));
+  const steps={"Apex menu":"Open the Apex menu, add the items from the Pick list, and check out. Download the PO file to keep a copy.",
+    "Excel order form":"Download the PO file, copy the quantities into the vendor’s Excel form, and send it to the rep.",
+    "Email":"Email the rep the order below, and attach the PO file.",
+    "PDF by email":"Download the PO file, save it as a PDF, and email it to the rep.",
+    "Call or text":"Call or text the rep with the order below."}[m]||"Pick how this vendor takes orders so the team knows what to do.";
+  const btns=[];
+  if(link)btns.push(`<a class="btn" href="${esc(link)}" target="_blank" rel="noopener">${m==="Apex menu"?"Open Apex menu":m==="Excel order form"?"Open order form":"Open order link"}</a>`);
+  if(folder&&folder!==link)btns.push(`<a class="btn" href="${esc(folder)}" target="_blank" rel="noopener">Vendor folder</a>`);
+  if(has)btns.push(`<button class="btn primary" data-po="${esc(v.key)}">Download ${v.due||!v.topups.length?"PO":"top-up"} file</button>`);
+  if(has&&v.email&&/@.+\./.test(v.email))btns.push(`<a class="btn" href="mailto:${esc(v.email)}?subject=${subj}&body=${encodeURIComponent(emailText(v).slice(0,1200))}" target="_blank" rel="noopener">Email ${esc(v.rep?v.rep.split(" ")[0]:"the rep")}</a>`);
+  if(v.phone)btns.push(`<a class="btn" href="tel:${esc(v.phone.replace(/[^0-9+]/g,""))}">Call ${esc(v.phone)}</a>`);
+  return `<div class="howto"><h3>How to order from ${esc(v.name)}</h3>
+    <div class="vgrid">
+      <label>Order method<select data-vf="method" data-key="${esc(v.key)}">${METHODS.map(([val,l])=>`<option value="${val}" ${val===m?"selected":""}>${l}</option>`).join("")}</select></label>
+      <label>Order link (menu or form)<input type="url" data-vf="orderLink" data-key="${esc(v.key)}" value="${esc(v.orderLink)}" placeholder="https://…"></label>
+      <label>Vendor folder<input type="url" data-vf="folder" data-key="${esc(v.key)}" value="${esc(v.folder)}" placeholder="Google Drive link"></label>
+      <label>Rep<input type="text" data-vf="rep" data-key="${esc(v.key)}" value="${esc(v.rep)}" placeholder="Name"></label>
+      <label>Phone<input type="tel" data-vf="phone" data-key="${esc(v.key)}" value="${esc(v.phone)}" placeholder="(555) 555-5555"></label>
+      <label>Email<input type="email" data-vf="email" data-key="${esc(v.key)}" value="${esc(v.email)}" placeholder="rep@vendor.com"></label>
+    </div>
+    <p class="small" style="margin:0 0 10px">${esc(steps)}</p>
+    ${btns.length?`<p class="btnrow">${btns.join("")}</p>`:""}
+    ${has&&(m==="Email"||m==="Call or text"||m==="PDF by email")?`<details><summary class="small">Order text to copy</summary><textarea readonly rows="8" class="otext">${esc(emailText(v))}</textarea></details>`:""}
+  </div>`;
+}
+
+/* ---------- views ---------- */
+const VALID=["week","vendors","brands","overstock","invoices","upload","setup","guide"];
+function route(){const h=(location.hash||"#week").slice(1);S.route=VALID.includes(h)?h:"week";
+  document.querySelectorAll("#tabs a").forEach(a=>a.setAttribute("aria-current",a.getAttribute("href")==="#"+S.route?"page":"false"));render()}
+function statusPill(s){const c={"ORDER":"s-order","Confirm, then order":"s-confirm","Overstocked":"s-over","OK":"s-ok"}[s]||"s-none";return `<span class="status ${c}">${esc(s)}</span>`}
+function freshLine(){
+  const el=$("#fresh");const m=S.local?S.local.meta:S.meta;
+  if(!m){el.textContent=S.dbState==="loading"?"Loading the latest order report…":"No order report yet. Upload one to start.";el.classList.remove("stale");return}
+  const age=m.uploadedAt?Math.floor((Date.now()-new Date(m.uploadedAt))/864e5):null;
+  const range=m.from&&m.to?`${fmtDate(m.from)} – ${fmtDate(m.to)} (${m.days} days of sales)`:`${m.days} days of sales`;
+  el.textContent=S.local?`Previewing ${range}. Not saved.`:`Order report ${range}, uploaded ${age===0?"today":age===1?"yesterday":age+" days ago"}.${age>7?" Time for a new upload.":""}`;
+  el.classList.toggle("stale",age>7);
+  if(S.meta&&S.meta.uploadedBy&&S.user&&!S.local){S.user.profiles([S.meta.uploadedBy]).then(p=>{const n=p&&p[S.meta.uploadedBy]&&p[S.meta.uploadedBy].name;if(n&&!el.textContent.includes(" by "))el.textContent=el.textContent.replace(/, uploaded /,`, uploaded by ${n} `)}).catch(()=>{})}
+}
+function banner(){
+  if(S.dbState==="none")return `<div class="notice">This copy can’t reach the shared data, so uploads and edits stay on this screen only. Open the planner in claude.ai to save them for the team.</div>`;
+  if(S.dbState==="slow")return `<div class="notice">The shared data hasn’t loaded yet. Numbers may be missing or out of date.</div>`;
+  if(S.dbState==="error")return `<div class="notice err">The shared data stopped responding. Reload the page to reconnect.</div>`;
+  return "";
+}
+function emptyState(){return `${banner()}<h2>No order report yet</h2><p class="lede">Upload the Dutchie Inventory Order Report to see this week’s vendor POs, stockouts and overstock.</p><a class="btn primary" href="#upload">Upload the order report</a>`}
+
+function viewWeek(m){
+  const {budget,weekPO,wom,monthB}=m;const max=Math.max(budget.ceil*1.35,weekPO*1.05,1);
+  const pct=x=>Math.min(100,x/max*100);
+  const over=weekPO>budget.ceil;
+  const due=m.vendors.filter(v=>v.due);
+  const cols=DAYS.map(d=>{
+    const vs=due.filter(v=>v.day===d).sort((a,b)=>b.po-a.po);
+    const withPO=vs.filter(v=>v.po>=1);const sum=withPO.reduce((a,v)=>a+v.po,0);
+    const quiet=vs.length-withPO.length;
+    return `<section class="day"><header><span class="dname">${d}</span><span class="dsum">${money(sum)}<small>${withPO.length} PO${withPO.length===1?"":"s"}</small></span></header>
+    ${withPO.length?`<ul>${withPO.map(v=>`<li><button data-open="${esc(v.key)}"><span class="vn">${esc(v.name)}</span><span class="vamt">${money(v.po)}</span><span class="vmeta">${v.nOrder} brand${v.nOrder===1?"":"s"} to order${v.method?" · "+esc(v.method):""}${v.freq==="Twice a month"?" · twice a month":""}${v.moqCheck&&v.moqCheck!=="Meets MOQ"?" · "+esc(v.moqCheck):""}${v.deliveryCheck&&v.deliveryCheck.startsWith("Would")?" · "+esc(v.deliveryCheck):""}</span></button></li>`).join("")}</ul>`:`<p class="empty">${wom>4?"Week 5: no scheduled orders.":"Nothing to order."}</p>`}
+    ${quiet?`<div class="later">${quiet} more vendor${quiet===1?"":"s"} scheduled, nothing needed.</div>`:""}</section>`}).join("");
+  const tops=m.vendors.filter(v=>v.topups.length).flatMap(v=>v.topups.map(b=>({v,b}))).sort((a,c)=>a.b.dos-c.b.dos);
+  const heavy=m.brands.filter(b=>b.status==="Overstocked").sort((a,b)=>b.excess-a.excess).slice(0,6);
+  return `${banner()}
+  <section class="gauge" aria-label="This week’s spend against budget">
+    <div class="nums"><span class="big">${money(weekPO)}</span><span class="sub">in POs for week ${wom>4?"5 (top-ups only)":wom+" of 4"}</span>
+    <span class="sub">Weekly share of the monthly budget: ${money(budget.floor)} to ${money(budget.ceil)}${over?` · <strong style="color:var(--ember)">${money(weekPO-budget.ceil)} over</strong>`:""}</span></div>
+    <div class="track"><div class="bandz" style="left:${pct(budget.floor)}%;width:${pct(budget.ceil)-pct(budget.floor)}%"></div><div class="fill${over?" over":""}" style="width:${pct(weekPO)}%"></div></div>
+    <div class="scale"><span style="left:${pct(budget.floor)}%">floor ${money(budget.floor)}</span><span style="left:${pct(budget.ceil)}%">ceiling ${money(budget.ceil)}</span></div>
+    <p class="small muted" style="margin:12px 0 0">Monthly budget ${money(monthB.floor)} to ${money(monthB.ceil)}. At the current sales pace, replacing what sells this month costs about ${money(m.monthPlan)}.${m.topupTotal>0?` Top-ups below add ${money(m.topupTotal)} if approved.`:""}</p>
+  </section>
+  <div class="board">${cols}</div>
+  <div class="alerts">
+    <section class="panel"><h3>Top brands that will run out before their next order</h3>${tops.length?`<ol>${tops.slice(0,10).map(({v,b})=>`<li><b>${esc(b.label)}</b>: ${num(b.dos,1)} days left, but the next ${esc(v.name)} order is ${nextDueText(v,wom)}. Bridge ${num(b.topup)} units (${money(b.topup*b.uc)}).</li>`).join("")}</ol><p class="small muted" style="margin:10px 0 0">A top-up only bridges the gap until the vendor’s scheduled delivery. Michael approves them.</p>`:`<p class="muted small">No top brand will run out before its next scheduled order.</p>`}</section>
+    <section class="panel"><h3>Hold orders on these</h3>${heavy.length?`<ul>${heavy.map(b=>`<li><b>${esc(b.label)}</b>: ${num(b.dos,0)} days of supply, ${money(b.excess)} over the ${m.st.overDays}-day line</li>`).join("")}</ul>`:`<p class="muted small">Nothing is overstocked.</p>`}<p class="small" style="margin:10px 0 0"><a href="#overstock">See all overstock</a></p></section>
+  </div>`;
+}
+
+function vendorDetail(v,wom){
+  const brandRows=v.brands.slice().sort((a,b)=>b.suggCost-a.suggCost||b.rev-a.rev).map(b=>`<tr>
+    <td>${esc(b.name)}</td><td><span class="tier ${b.tier}">${b.tier}</span></td><td>${statusPill(b.status)}${b.topup?' <span class="status s-confirm">Top-up</span>':""}</td>
+    <td class="n">${num(b.upd,1)}</td><td class="n">${num(b.oh)}</td><td class="n">${b.dos==null?"–":num(b.dos,0)}</td><td class="n">${num(b.out)}</td><td class="n"><b>${b.sugg?num(b.sugg):(b.topup?num(b.topup)+" now":"–")}</b></td><td class="n">${b.sugg?money(b.suggCost):(b.topup?money(b.topup*b.uc):"–")}</td></tr>
+    ${(b.picks.length||b.topPicks.length)?`<tr><td colspan="9"><p class="skus">${b.topPicks.length&&!v.due?"Top-up pick":"Pick"}: ${(v.due||!b.topPicks.length?b.picks:b.topPicks).slice(0,12).map(p=>`<b>${esc(p.name)}</b> ×${p.units}`).join(" · ")}${(v.due||!b.topPicks.length?b.picks:b.topPicks).length>12?" and more in the PO file":""}</p></td></tr>`:""}`).join("");
+  const wkOpts=v.freq==="Twice a month"?[[1,"Weeks 1 & 3"],[2,"Weeks 2 & 4"]]:[[1,"Week 1"],[2,"Week 2"],[3,"Week 3"],[4,"Week 4"]];
+  const curW=v.freq==="Twice a month"?vWeeks(v)[0]:v.week;
+  return `<tr class="vdetail"><td colspan="7">
+    <div class="vgrid">
+      <label>How often<select data-vf="freq" data-key="${esc(v.key)}">${["Monthly","Twice a month"].map(f=>`<option ${f===v.freq?"selected":""}>${f}</option>`).join("")}</select></label>
+      <label>Order week<select data-vf="week" data-key="${esc(v.key)}">${wkOpts.map(([w,l])=>`<option value="${w}" ${w===curW?"selected":""}>${l}</option>`).join("")}</select></label>
+      <label>Order day<select data-vf="day" data-key="${esc(v.key)}">${DAYS.map(d=>`<option ${d===v.day?"selected":""}>${d}</option>`).join("")}</select></label>
+      <label>Lead time (days)<input type="number" min="0" step="1" inputmode="numeric" data-vf="lead" data-key="${esc(v.key)}" value="${v.leadSet?v.lead:""}" placeholder="${settings().leadDefault} (default)"></label>
+      <label>MOQ ($)<input type="number" min="0" step="50" inputmode="numeric" data-vf="moq" data-key="${esc(v.key)}" value="${v.moq||""}" placeholder="Not set"></label>
+      <label>Delivers next day?<select data-vf="nextDay" data-key="${esc(v.key)}"><option value="" ${!v.nextDay?"selected":""}>Not sure</option><option value="Y" ${v.nextDay==="Y"?"selected":""}>Yes</option><option value="N" ${v.nextDay==="N"?"selected":""}>No</option></select></label>
+      <label>Notes<input type="text" data-vf="notes" data-key="${esc(v.key)}" value="${esc(v.notes)}" placeholder="Rep, delivery days…"></label>
+    </div>
+    <p class="small muted" style="margin:-4px 0 12px">Each order covers ${v.review} days of sales plus ${v.lead} days of delivery time and a safety cushion.${v.due?" This vendor’s order is due this week.":` Next order ${nextDueText(v,wom)}.`}</p>
+    ${v.deliveryCheck.startsWith("Would")?`<p class="flag warn">${esc(v.deliveryCheck)}.</p>`:""}
+    <div class="inner"><table><thead><tr><th>Brand</th><th>Tier</th><th>Status</th><th class="n">Units/day</th><th class="n">On hand</th><th class="n">Days left</th><th class="n">Order up to</th><th class="n">Order units</th><th class="n">Est. cost</th></tr></thead><tbody>${brandRows}</tbody></table></div>
+    ${v.po>0||v.topups.length?"":`<p class="muted small" style="margin:12px 0 0">Nothing to order from this vendor right now.</p>`}
+    ${howToOrder(v)}
+  </td></tr>`;
+}
+function viewVendors(m){
+  const q=S.vendorQuery.toLowerCase();
+  const vs=m.vendors.filter(v=>!q||v.name.toLowerCase().includes(q)||v.brands.some(b=>b.name.toLowerCase().includes(q)))
+    .sort((a,b)=>vWeeks(a)[0]-vWeeks(b)[0]||DAYS.indexOf(a.day)-DAYS.indexOf(b.day)||b.monthly-a.monthly);
+  return `${banner()}<h2>Vendors</h2><p class="lede">Each vendor gets one order a month in its assigned week, and the biggest get two. Open a vendor to see its brands, which items to pick, and to change its schedule, lead time, MOQ and delivery details.</p>
+  <div class="toolbar"><input type="search" id="vq" placeholder="Search vendors or brands" value="${esc(S.vendorQuery)}" aria-label="Search vendors or brands"></div>
+  <div class="tablebox"><table><thead><tr><th>Vendor</th><th>Tier</th><th>Schedule</th><th class="n">Next PO (est.)</th><th>When</th><th>How to order</th><th class="n">Monthly buy at pace</th></tr></thead><tbody>
+  ${vs.map(v=>`<tr class="clickable" data-toggle="${esc(v.key)}" tabindex="0" aria-expanded="${S.open===v.key}"><td><b>${esc(v.name)}</b><div class="small muted">${esc(v.brands.slice().sort((a,c)=>c.rev-a.rev).map(b=>b.name).join(", "))}</div></td><td><span class="tier ${v.tier}">${v.tier}</span></td><td>${esc(schedText(v))}${v.freq==="Twice a month"?' <span class="status s-ok">2×</span>':""}${v.schedSuggested?' <span class="small muted">(suggested)</span>':""}</td><td class="n">${v.po>0?`<span class="status s-order">${money(v.po)}</span>`:"–"}${v.topups.length?`<div class="small" style="color:var(--amber)">Top-up ${money(v.topupCost)}</div>`:""}</td><td>${v.due?"<b>This week</b>":`<span class="muted small">${nextDueText(v,m.wom)}</span>`}</td><td class="small">${v.method?esc(v.method):'<span class="muted">Not set</span>'}${v.rep?`<div class="muted">${esc(v.rep)}</div>`:""}${v.moqCheck&&v.moqCheck!=="Meets MOQ"?`<div class="muted">${esc(v.moqCheck)}</div>`:""}</td><td class="n">${money(v.monthly)}</td></tr>${S.open===v.key?vendorDetail(v,m.wom):""}`).join("")}
+  </tbody></table></div>`;
+}
+function viewBrands(m){
+  const filters=["ORDER","Confirm, then order","Overstocked","OK","All"];
+  const q=S.brandQuery.toLowerCase();
+  const bs=m.brands.filter(b=>(S.brandFilter==="All"||b.status===S.brandFilter)&&(!q||b.label.toLowerCase().includes(q)||b.vendor.toLowerCase().includes(q)));
+  return `${banner()}<h2>Brands</h2><p class="lede">Tier comes from each brand’s share of sales in the report. “Review” brands are out of stock and haven’t been received in 60+ days, so decide keep or drop before reordering.</p>
+  <div class="toolbar">${filters.map(f=>`<button class="chip" data-bf="${esc(f)}" aria-pressed="${S.brandFilter===f}">${esc(f)} (${f==="All"?m.brands.length:m.brands.filter(b=>b.status===f).length})</button>`).join("")}
+  <input type="search" id="bq" placeholder="Search brands or vendors" value="${esc(S.brandQuery)}" aria-label="Search brands or vendors"></div>
+  <div class="tablebox"><table><thead><tr><th>Brand</th><th>Vendor</th><th>Tier</th><th>Keep carrying?</th><th>Status</th><th class="n">Units/day</th><th class="n">On hand</th><th class="n">Days left</th><th class="n">Reorder at</th><th class="n">Order up to</th><th class="n">Order units</th><th class="n">Est. cost</th></tr></thead><tbody>
+  ${bs.map(b=>`<tr><td><b>${esc(b.label)}</b><div class="small muted">${esc(b.cat)}</div></td><td class="small">${esc(b.vendor)}</td><td><span class="tier ${b.tier}">${b.tier}</span></td>
+  <td><select data-keep="${esc(b.name)}" aria-label="Keep carrying ${esc(b.name)}">${[["Y","Yes"],["Review","Review"],["N","Drop"]].map(([v,l])=>`<option value="${v}" ${b.keep===v?"selected":""}>${l}</option>`).join("")}</select></td>
+  <td>${statusPill(b.status)}</td><td class="n">${num(b.upd,1)}</td><td class="n">${num(b.oh)}</td><td class="n">${b.dos==null?"–":num(b.dos,0)}</td><td class="n">${num(b.rop)}</td><td class="n">${num(b.out)}</td><td class="n"><b>${b.sugg?num(b.sugg):"–"}</b></td><td class="n">${b.sugg?money(b.suggCost):"–"}</td></tr>`).join("")||`<tr><td colspan="12" class="muted">No brands match.</td></tr>`}
+  </tbody></table></div>`;
+}
+function viewOverstock(m){
+  const st=m.st;
+  const over=m.brands.filter(b=>b.status==="Overstocked").sort((a,b)=>b.excess-a.excess);
+  const dead=m.brands.filter(b=>b.status==="No recent sales"&&b.ohCost>0).sort((a,b)=>b.ohCost-a.ohCost);
+  const skuOver=[];m.brands.forEach(b=>b.skus.forEach(k=>{if(k.oh<=0)return;const d=k.upd>0?k.oh/k.upd:Infinity;if(d>st.overDays){skuOver.push({b,k,d,ex:(k.oh-k.upd*st.overDays)*k.uc})}}));
+  skuOver.sort((a,b)=>b.ex-a.ex);
+  const tot=over.reduce((a,b)=>a+b.excess,0);
+  return `${banner()}<h2>Overstock</h2><p class="lede">${money(tot)} at cost is sitting above the ${st.overDays}-day line across ${over.length} brands. These get no new orders until they sell down. Move them with placement, staff pushes or promos.</p>
+  <div class="tablebox"><table><thead><tr><th>Brand</th><th>Vendor</th><th class="n">On hand</th><th class="n">Units/day</th><th class="n">Days of supply</th><th class="n">On-hand cost</th><th class="n">Over the line</th></tr></thead><tbody>
+  ${over.map(b=>`<tr><td><b>${esc(b.label)}</b></td><td class="small">${esc(b.vendor)}</td><td class="n">${num(b.oh)}</td><td class="n">${num(b.upd,1)}</td><td class="n">${num(b.dos,0)}</td><td class="n">${money(b.ohCost)}</td><td class="n"><b>${money(b.excess)}</b></td></tr>`).join("")||`<tr><td colspan="7" class="muted">Nothing is overstocked.</td></tr>`}
+  </tbody></table></div>
+  <h3 style="margin:26px 0 8px">Slowest items</h3><p class="lede small">Individual SKUs with the most money over the line, including items with no sales in the report window.</p>
+  <div class="tablebox"><table><thead><tr><th>Product</th><th>Brand</th><th class="n">On hand</th><th class="n">Units/day</th><th class="n">Days of supply</th><th class="n">Over the line</th></tr></thead><tbody>
+  ${skuOver.slice(0,40).map(x=>`<tr><td>${esc(x.k.name)}</td><td class="small">${esc(x.b.label)}</td><td class="n">${num(x.k.oh)}</td><td class="n">${num(x.k.upd,2)}</td><td class="n">${isFinite(x.d)?num(x.d,0):"No sales"}</td><td class="n">${money(x.ex)}</td></tr>`).join("")}
+  </tbody></table></div>
+  ${dead.length?`<p class="small muted" style="margin-top:14px">${dead.length} brands have stock but no sales in this report window (${money(dead.reduce((a,b)=>a+b.ohCost,0))} at cost).</p>`:""}`;
+}
+function viewUpload(){
+  const p=S.parsed;
+  return `${banner()}<h2>Upload this week’s report</h2><p class="lede">Juan uploads once a week, before that week’s orders. Everything else updates for the whole team.</p>
+  <ol class="steps">
+    <li>In Dutchie, export the <b>Inventory Order Report</b> for the <b>last 30 days</b>, ending today.</li>
+    <li>Drop the .xlsx file below and check the summary.</li>
+    <li>Choose <b>Save report</b>.</li>
+  </ol>
+  <label class="drop" id="drop"><strong>Drop the order report here</strong><span class="muted">or choose the file</span><br><input type="file" id="file" accept=".xlsx,.xls,.csv" style="margin-top:12px"></label>
+  <div id="perr"></div>
+  ${p?`<div class="preview panel"><h3>${esc(p.meta.fileName)}</h3><dl class="kv">
+    <dt>Sales window</dt><dd>${p.meta.from?fmtDate(p.meta.from)+" – "+fmtDate(p.meta.to):"Not in the file"}</dd>
+    <dt>Days</dt><dd>${p.meta.days?p.meta.days:`<input type="number" id="pdays" value="30" min="1" style="width:80px"> (set the number of days the report covers)`}</dd>
+    <dt>Active items</dt><dd>${num(p.meta.skuCount)}</dd>
+    <dt>Units on hand</dt><dd>${num(p.rows.reduce((a,r)=>a+r[6],0))}</dd></dl>
+    ${p.meta.days&&(p.meta.days<21||p.meta.days>45)?`<p class="notice small" style="margin-top:12px">This report covers ${p.meta.days} days. A 30-day export keeps the reorder math current.</p>`:""}
+    <p style="margin:14px 0 0"><button class="btn primary" id="savep" ${S.saving?"disabled":""}>${S.saving?"Saving…":"Save report"}</button> <button class="btn" id="cancelp">Cancel</button></p></div>`:""}
+  ${S.history.length?`<h3 style="margin:28px 0 8px">Past uploads</h3><div class="tablebox" style="max-width:860px"><table><thead><tr><th>Uploaded</th><th>Sales window</th><th class="n">POs that week</th><th class="n">On-hand cost</th><th class="n">Overstock</th><th class="n">Top-brand stockouts</th></tr></thead><tbody>
+  ${S.history.map(h=>`<tr><td>${fmtDate(h.at)}</td><td>${h.from?fmtDate(h.from)+" – "+fmtDate(h.to):h.days+" days"}</td><td class="n">${money(h.po)}</td><td class="n">${money(h.ohCost)}</td><td class="n">${money(h.overstock)}</td><td class="n">${num(h.stockouts)}</td></tr>`).join("")}</tbody></table></div>`:""}`;
+}
+function viewSetup(){
+  const s=settings();const mb=s.lastMonthSales;
+  return `${banner()}<h2>Budget &amp; rules</h2><p class="lede">Update last month’s sales on the first Monday of each month. The monthly budget is split evenly across weeks 1 to 4.</p>
+  <form class="form" id="setform">
+    <label>Last month’s sales collected ($)<input name="lastMonthSales" type="number" step="1" value="${s.lastMonthSales}"></label>
+    <label>Budget floor (% of last month)<input name="floorPct" type="number" step="1" value="${Math.round(s.floorPct*100)}"></label>
+    <label>Budget ceiling (% of last month)<input name="ceilPct" type="number" step="1" value="${Math.round(s.ceilPct*100)}"></label>
+    <label>Days covered by a monthly order<input name="reviewMonthly" type="number" step="1" value="${s.reviewMonthly}"></label>
+    <label>Days covered by a twice-a-month order<input name="reviewTwice" type="number" step="1" value="${s.reviewTwice}"></label>
+    <label>Default lead time (days)<input name="leadDefault" type="number" step="1" value="${s.leadDefault}"></label>
+    <label>Overstock line (days of supply)<input name="overDays" type="number" step="1" value="${s.overDays}"></label>
+    ${["A","B","C"].map(t=>`<label>Tier ${t} safety stock (days)<input name="saf${t}" type="number" step="1" value="${s.tiers[t].safety}"></label>`).join("")}
+    <p class="muted small" style="margin:0">Monthly budget right now: ${money(mb*s.floorPct)} to ${money(mb*s.ceilPct)}, or ${money(mb*s.floorPct/4)} to ${money(mb*s.ceilPct/4)} a week.</p>
+    <div><button class="btn primary" type="submit">Save rules</button></div>
+  </form>
+  <section class="panel" style="margin-top:26px;max-width:760px"><h3>The rules</h3><ol>
+    <li>Every order starts here, not from the shelves or a vendor’s suggested order.</li>
+    <li>Each vendor is ordered once a month in its assigned week. The biggest vendors are ordered twice a month.</li>
+    <li>On a vendor’s order day, order the brands marked ORDER, in the suggested units.</li>
+    <li>Overstocked brands get nothing new until they sell down.</li>
+    <li>Top-ups between scheduled orders are only for Tier A brands that would run out first, and Michael approves them.</li>
+    <li>Juan builds each PO. Michael approves anything over the week’s budget or marked Review.</li>
+    <li>Deliveries land Monday to Wednesday only. Next-day vendors order Monday or Tuesday.</li>
+    <li>A PO under the vendor’s MOQ waits for the next order day unless a Tier A brand would run out.</li>
+  </ol></section>`;
+}
+
+/* ---------- invoices ---------- */
+const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const monthLabel=(k,long)=>{if(!k)return "";const [y,m]=k.split("-");return (long?new Date(+y,+m-1,1).toLocaleDateString("en-US",{month:"long"}):MONTHS[+m-1])+" "+y};
+const todayISO=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+const invVendor=i=>i.vendorName||i.supplier||"Unknown vendor";
+const invKey=i=>i.vendorKey||("s:"+String(i.supplier||"").toLowerCase().trim());
+const isOverdue=i=>i.status==="Unpaid"&&i.due&&i.due<todayISO();
+const fileUrl=i=>i.assetId?"/_blob/"+i.assetId:(/^https?:\/\//.test(i.driveLink||"")?i.driveLink:"");
+function invStatusPill(i){if(isOverdue(i))return `<span class="status s-order" style="background:var(--ember);color:#fff">Overdue</span>`;
+  return i.status==="Paid"?`<span class="status s-ok">Paid</span>`:i.status==="Unpaid"?`<span class="status s-confirm">Unpaid</span>`:`<span class="status s-none">Not marked</span>`}
+function normName(s){return String(s||"").toLowerCase().replace(/&/g," and ").replace(/[^a-z0-9 ]+/g," ").replace(/\b(llc|inc|co|company|corp|cannabis|the|of|dba|d b a|massachusetts|ma|brands?|holdings|operations?)\b/g," ").replace(/\s+/g," ").trim()}
+function matchVendor(name){
+  const m=S.model;if(!m||!name)return null;const n=normName(name);if(!n)return null;
+  const toks=n.split(" ").filter(t=>t.length>=3);let best=null,score=0;
+  for(const v of m.vendors){
+    const hay=[v.name,...v.brands.map(b=>b.name)].map(normName);
+    let s=0;for(const h of hay){if(h&&(h===n||n.includes(h)&&h.length>=4||h.includes(n)&&n.length>=4))s=Math.max(s,10);else{const ht=h.split(" ");s=Math.max(s,toks.filter(t=>ht.includes(t)).length)}}
+    if(s>score){score=s;best=v}
+  }
+  return score>0?best:null;
+}
+function invParts(i){
+  const amt=Number(i.amount)||0;
+  if(Array.isArray(i.lineItems)&&i.lineItems.length){const tot=i.lineItems.reduce((a,l)=>a+(Number(l.amount)||0),0);const o={};
+    i.lineItems.forEach(l=>{const b=(l.brand||invVendor(i)).trim();o[b]=(o[b]||0)+(tot?amt*(Number(l.amount)||0)/tot:amt/i.lineItems.length)});return {parts:o,split:true}}
+  const v=S.model&&i.vendorKey?S.model.vendors.find(x=>x.key===i.vendorKey):null;
+  const names=v?[...new Set(v.brands.filter(b=>b.sold>0).map(b=>b.name))]:[];
+  if(names.length===1)return {parts:{[names[0]]:amt},split:true};
+  return {parts:{"Not broken out by brand":amt},split:false};
+}
+function invFiltered(){
+  const f=S.invF;
+  return S.invoices.filter(i=>(!f.year||String(i.month||"").startsWith(f.year))&&(!f.month||String(i.month||"").slice(5,7)===f.month)&&(!f.vendor||invKey(i)===f.vendor)&&(!f.brand||invParts(i).parts[f.brand]!=null));
+}
+const effAmt=i=>S.invF.brand?(invParts(i).parts[S.invF.brand]||0):(Number(i.amount)||0);
+function bars(rows,total){
+  const max=Math.max(...rows.map(r=>r[1]),1);
+  return `<div class="hbars">${rows.map(([k,v,sub,fkey,fval])=>`<div class="hb">${fkey?`<button class="hbl linkish" data-inv-set="${fkey}" data-val="${esc(fval)}" title="Filter to ${esc(k)}">${esc(k)}${sub?`<small>${esc(sub)}</small>`:""}</button>`:`<span class="hbl">${esc(k)}${sub?`<small>${esc(sub)}</small>`:""}</span>`}<span class="hbt"><span class="hbf${k==="Not broken out by brand"?" dim":""}" style="width:${Math.max(1,v/max*100)}%"></span></span><span class="hbv">${money(v)}${total?`<small>${Math.round(v/total*100)}%</small>`:""}</span></div>`).join("")}</div>`;
+}
+function viewInvoices(){
+  if(!S.invF){const ms=S.invoices.map(i=>i.month).filter(Boolean).sort();const last=ms[ms.length-1]||todayISO().slice(0,7);S.invF={year:last.slice(0,4),month:last.slice(5,7),vendor:"",brand:""}}
+  const f=S.invF;const st=settings();const mb={floor:st.lastMonthSales*st.floorPct,ceil:st.lastMonthSales*st.ceilPct};
+  const years=[...new Set(S.invoices.map(i=>String(i.month||"").slice(0,4)).filter(Boolean).concat([todayISO().slice(0,4)]))].sort().reverse();
+  const vmap={};S.invoices.forEach(i=>{vmap[invKey(i)]=invVendor(i)});
+  const vopts=Object.entries(vmap).sort((a,b)=>a[1].localeCompare(b[1]));
+  const bset=new Set();S.invoices.forEach(i=>Object.keys(invParts(i).parts).forEach(b=>{if(b!=="Not broken out by brand")bset.add(b)}));
+  const bopts=[...bset].sort((a,b)=>a.localeCompare(b));
+  const list=invFiltered();
+  const total=list.reduce((a,i)=>a+effAmt(i),0);
+  const sum=fn=>list.filter(fn).reduce((a,i)=>a+effAmt(i),0);
+  const paid=sum(i=>i.status==="Paid"),unpaid=sum(i=>i.status==="Unpaid"),nm=sum(i=>i.status!=="Paid"&&i.status!=="Unpaid"),over=sum(isOverdue);
+  const scope=[f.month?new Date(2000,+f.month-1,1).toLocaleDateString("en-US",{month:"long"}):"",f.year||"All years"].filter(Boolean).join(" ")+(f.vendor?` \u00b7 ${vmap[f.vendor]||""}`:"")+(f.brand?` \u00b7 ${f.brand}`:"");
+  const showBudget=f.month&&f.year&&!f.vendor&&!f.brand;
+  // trend: months of chosen year (or last 12), with vendor/brand filters but not month
+  const base=S.invoices.filter(i=>(!f.vendor||invKey(i)===f.vendor)&&(!f.brand||invParts(i).parts[f.brand]!=null));
+  let tmonths;if(f.year){tmonths=[];for(let m=1;m<=12;m++){const k=f.year+"-"+String(m).padStart(2,"0");if(k<=todayISO().slice(0,7)||base.some(i=>i.month===k))tmonths.push(k)}}
+  else{tmonths=[...new Set(base.map(i=>i.month).filter(Boolean))].sort().slice(-12)}
+  const tv=k=>base.filter(i=>i.month===k).reduce((a,i)=>a+effAmt(i),0);
+  const tmax=Math.max(...tmonths.map(tv),(!f.vendor&&!f.brand)?mb.ceil:0,1);
+  const trend=`<div class="trend" role="list">${tmonths.map(k=>{const t=tv(k);const on=f.month&&k.slice(5,7)===f.month&&(!f.year||k.startsWith(f.year));return `<button role="listitem" class="tcol${on?" on":""}" data-inv-month="${k}" aria-label="${monthLabel(k,true)}: ${money(t)}"><span class="tval">${t>=1000?"$"+Math.round(t/1000)+"K":t?money(t):""}</span><span class="tbar"><span style="height:${t/tmax*100}%"${(!f.vendor&&!f.brand&&t>mb.ceil)?' class="over"':""}></span></span><span class="tlab">${monthLabel(k).replace(" 20","\u2019")}</span></button>`}).join("")}${(!f.vendor&&!f.brand)?`<span class="tline" style="bottom:${22+mb.ceil/tmax*130}px"></span>`:""}</div>
+    <p class="small muted" style="margin:6px 0 0">${(!f.vendor&&!f.brand)?`The dashed line is the ${Math.round(st.ceilPct*100)}% budget ceiling (${money(mb.ceil)}). `:""}Click a month to filter to it.</p>`;
+  const vm={};list.forEach(i=>{const k=invKey(i);if(!vm[k])vm[k]={k,name:invVendor(i),amt:0,n:0};vm[k].amt+=effAmt(i);vm[k].n++});
+  const vrows=Object.values(vm).sort((a,b)=>b.amt-a.amt);
+  const shown=vrows.slice(0,12).map(v=>[v.name,v.amt,v.n+" invoice"+(v.n===1?"":"s"),"vendor",v.k]);
+  if(vrows.length>12)shown.push([`${vrows.length-12} other vendors`,vrows.slice(12).reduce((a,v)=>a+v.amt,0)]);
+  const bo={};let covered=0;list.forEach(i=>{const p=invParts(i);if(p.split)covered+=effAmt(i);Object.entries(p.parts).forEach(([b,v])=>{if(f.brand&&b!==f.brand)return;bo[b]=(bo[b]||0)+v})});
+  const brows=Object.entries(bo).sort((a,b)=>(a[0]==="Not broken out by brand")-(b[0]==="Not broken out by brand")||b[1]-a[1]).slice(0,12).map(([b,v])=>[b,v,"","brand",b==="Not broken out by brand"?"":b]).map(r=>r[4]?r:[r[0],r[1]]);
+  const soon=S.invoices.filter(i=>i.status==="Unpaid"&&i.due&&i.due<=new Date(Date.now()+14*864e5).toISOString().slice(0,10)&&(!f.vendor||invKey(i)===f.vendor)).sort((a,b)=>a.due<b.due?-1:1);
+  const q=(S.invQuery||"").toLowerCase();const F=S.invFilter||"All";
+  const rows=list.filter(i=>(F==="All"||(F==="Overdue"?isOverdue(i):F==="Unpaid"?i.status==="Unpaid":F==="Paid"?i.status==="Paid":i.status!=="Paid"&&i.status!=="Unpaid"))&&(!q||invVendor(i).toLowerCase().includes(q)||String(i.supplier||"").toLowerCase().includes(q)||String(i.invoiceNo||"").toLowerCase().includes(q)))
+    .sort((a,b)=>String(b.received||b.month||"").localeCompare(String(a.received||a.month||"")));
+  const canWrite=!!S.db;const nmCount=list.filter(i=>i.status!=="Paid"&&i.status!=="Unpaid").length;
+  const anyFilter=f.year||f.month||f.vendor||f.brand;
+  const sel=(id,label,opts,val)=>`<label class="fsel"><span>${label}</span><select id="${id}">${opts.map(([v,l])=>`<option value="${esc(v)}" ${v===val?"selected":""}>${esc(l)}</option>`).join("")}</select></label>`;
+  return `${banner()}<h2>Invoices &amp; purchases</h2><p class="lede">Every vendor invoice in one place. Drop invoice PDFs below, mark them paid, and see what we bought by month, vendor and brand.</p>
+  ${ingestBlock()}
+  <section class="filters" aria-label="Filters">
+    ${sel("invf-year","Year",[["","All years"],...years.map(y=>[y,y])],f.year)}
+    ${sel("invf-month","Month",[["","All months"],...MONTHS.map((m,ix)=>[String(ix+1).padStart(2,"0"),new Date(2000,ix,1).toLocaleDateString("en-US",{month:"long"})])],f.month)}
+    ${sel("invf-vendor","Vendor",[["","All vendors"],...vopts],f.vendor)}
+    ${sel("invf-brand","Brand",[["","All brands"],...bopts.map(b=>[b,b])],f.brand)}
+    <div class="factions">${anyFilter?`<button class="btn small" id="invf-clear">Clear filters</button>`:""}<button class="btn small" id="invexport" ${list.length?"":"disabled"}>Download (Excel)</button></div>
+  </section>
+  <section class="gauge"><p class="scope">${esc(scope)}</p><div class="kpis">
+    <div><span class="k">Purchased${f.brand?" (this brand\u2019s share)":""}</span><span class="v">${money(total)}</span><span class="s">${list.length} invoice${list.length===1?"":"s"}${showBudget?` \u00b7 budget ${money(mb.floor)}\u2013${money(mb.ceil)}${total>mb.ceil?` \u00b7 <b style="color:var(--ember)">${money(total-mb.ceil)} over</b>`:""}`:""}</span></div>
+    <div><span class="k">Paid</span><span class="v" style="color:var(--ok)">${money(paid)}</span></div>
+    <div><span class="k">Unpaid</span><span class="v" style="color:var(--amber)">${money(unpaid)}</span><span class="s">${over>0?`<b style="color:var(--ember)">${money(over)} overdue</b>`:"none overdue"}</span></div>
+    <div><span class="k">Not marked yet</span><span class="v muted">${money(nm)}</span>${nmCount>0&&canWrite?`<button class="btn small" id="invbulk" style="margin-top:6px">Mark these ${nmCount} paid</button>`:""}</div>
+  </div></section>
+  <section class="panel" style="margin-bottom:16px"><h3>Purchases by month${f.year?", "+f.year:""}</h3>${trend}</section>
+  <div class="alerts" style="margin:0 0 16px">
+    <section class="panel"><h3>By vendor</h3>${vrows.length?bars(shown,total):`<p class="muted small">No invoices match these filters.</p>`}</section>
+    <section class="panel"><h3>By brand</h3>${brows.length?bars(brows,total):`<p class="muted small">No invoices match these filters.</p>`}
+      ${total>0&&!f.brand?`<p class="small muted" style="margin:10px 0 0">${money(covered)} of ${money(total)} is split by brand, from invoice line items or vendors that carry one brand. Uploading invoice PDFs breaks the rest down.</p>`:""}</section>
+  </div>
+  ${soon.length?`<section class="panel" style="margin-bottom:16px"><h3>Due in the next two weeks or overdue</h3><ul>${soon.slice(0,12).map(i=>`<li><b>${esc(invVendor(i))}</b> ${i.invoiceNo?esc(i.invoiceNo)+" ":""}\u2014 ${money(i.amount)} due ${fmtDate(i.due+"T12:00")}${isOverdue(i)?' <span class="status s-order" style="background:var(--ember);color:#fff">Overdue</span>':""}</li>`).join("")}</ul></section>`:""}
+  <div class="toolbar">${["All","Unpaid","Overdue","Paid","Not marked"].map(x=>`<button class="chip" data-inv-f="${x}" aria-pressed="${F===x}">${x}</button>`).join("")}<input type="search" id="invq" placeholder="Search vendor or invoice #" value="${esc(S.invQuery||"")}" aria-label="Search invoices"></div>
+  <div class="tablebox"><table><thead><tr><th>Received</th><th>Vendor</th><th>Invoice #</th><th class="n">Amount</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>
+  ${rows.map(i=>`<tr class="clickable" data-inv-toggle="${esc(i.id)}" tabindex="0"><td>${i.received?fmtDate(i.received+"T12:00"):monthLabel(i.month)}</td><td><b>${esc(invVendor(i))}</b>${i.vendorName&&i.supplier&&normName(i.supplier)!==normName(i.vendorName)?`<div class="small muted">${esc(i.supplier)}</div>`:""}</td>
+    <td>${fileUrl(i)?`<a href="${esc(fileUrl(i))}" target="_blank" rel="noopener">${esc(i.invoiceNo||"View")}</a>`:esc(i.invoiceNo||"\u2013")}</td><td class="n">${money(i.amount)}${f.brand&&effAmt(i)!==Number(i.amount)?`<div class="small muted">${esc(f.brand)}: ${money(effAmt(i))}</div>`:""}</td><td>${i.due?fmtDate(i.due+"T12:00"):"\u2013"}</td><td>${invStatusPill(i)}</td>
+    <td>${canWrite?`<button class="btn small" data-inv-paid="${esc(i.id)}">${i.status==="Paid"?"Mark unpaid":"Mark paid"}</button>`:""}</td></tr>${S.invOpen===i.id?invEdit(i):""}`).join("")||`<tr><td colspan="7" class="muted">No invoices match.</td></tr>`}
+  </tbody></table></div>`;
+}
+function vendorOptions(sel){const vs=S.model?S.model.vendors.slice().sort((a,b)=>a.name.localeCompare(b.name)):[];return `<option value="">Not in the planner</option>`+vs.map(v=>`<option value="${esc(v.key)}" ${v.key===sel?"selected":""}>${esc(v.name)}</option>`).join("")}
+function invFields(i,prefix){
+  return `<div class="vgrid">
+    <label>Vendor on invoice<input name="supplier" value="${esc(i.supplier||"")}" required></label>
+    <label>Planner vendor<select name="vendorKey">${vendorOptions(i.vendorKey)}</select></label>
+    <label>Invoice #<input name="invoiceNo" value="${esc(i.invoiceNo||"")}"></label>
+    <label>Received / invoice date<input type="date" name="received" value="${esc(i.received||"")}"></label>
+    <label>Counts toward month<input type="month" name="month" value="${esc(i.month||todayISO().slice(0,7))}" required></label>
+    <label>Due date<input type="date" name="due" value="${esc(i.due||"")}"></label>
+    <label>Subtotal ($)<input type="number" step="0.01" name="subtotal" value="${i.subtotal??""}"></label>
+    <label>Discount ($)<input type="number" step="0.01" name="discount" value="${i.discount??""}"></label>
+    <label>Amount to pay ($)<input type="number" step="0.01" name="amount" value="${i.amount??""}" required></label>
+    <label>Status<select name="status">${["Unpaid","Paid","Not marked"].map(s=>`<option ${s===(i.status||"Unpaid")?"selected":""}>${s}</option>`).join("")}</select></label>
+  </div>`;
+}
+function invEdit(i){
+  const li=Array.isArray(i.lineItems)?i.lineItems:[];
+  return `<tr class="vdetail"><td colspan="7"><form class="invedit" data-id="${esc(i.id)}">${invFields(i)}
+    ${li.length?`<details><summary class="small">${li.length} line items</summary><div class="inner" style="margin-top:8px"><table><thead><tr><th>Brand</th><th>Product</th><th class="n">Qty</th><th class="n">Amount</th></tr></thead><tbody>${li.map(l=>`<tr><td>${esc(l.brand||"")}</td><td>${esc(l.product||"")}</td><td class="n">${num(l.qty)}</td><td class="n">${money(l.amount)}</td></tr>`).join("")}</tbody></table></div></details>`:""}
+    <p class="btnrow" style="margin-top:12px">${S.db?`<button class="btn primary" type="submit">Save changes</button><button class="btn" type="button" data-inv-del="${esc(i.id)}">Delete invoice</button>`:""}${fileUrl(i)?`<a class="btn" href="${esc(fileUrl(i))}" target="_blank" rel="noopener">Open invoice</a>`:""}</p>
+    ${i.paidAt?`<p class="small muted">Marked paid ${fmtDate(i.paidAt)}.</p>`:""}</form></td></tr>`;
+}
+function ingestBlock(){
+  const g=S.ingest;
+  if(g&&g.current){const c=g.current;
+    return `<section class="panel ingest"><h3>Check this invoice${g.queue.length?` (${g.queue.length} more waiting)`:""}</h3>
+      <p class="small muted" style="margin:0 0 12px">${esc(c.fileName)}${c.note?` \u00b7 ${esc(c.note)}`:""}</p>
+      ${c.dupe?`<p class="notice small">This looks like a duplicate of an invoice already logged (${esc(c.dupe)}).</p>`:""}
+      <form id="ingestform">${invFields(c.data)}
+      ${c.data.lineItems&&c.data.lineItems.length?`<details><summary class="small">${c.data.lineItems.length} line items read from the invoice</summary><div class="inner" style="margin-top:8px"><table><thead><tr><th>Brand</th><th>Product</th><th class="n">Qty</th><th class="n">Amount</th></tr></thead><tbody>${c.data.lineItems.map(l=>`<tr><td>${esc(l.brand||"")}</td><td>${esc(l.product||"")}</td><td class="n">${num(l.qty)}</td><td class="n">${money(l.amount)}</td></tr>`).join("")}</tbody></table></div></details>`:""}
+      <p class="btnrow" style="margin-top:12px"><button class="btn primary" type="submit" ${g.busy?"disabled":""}>${g.busy?"Saving\u2026":"Save invoice"}</button><button class="btn" type="button" id="ingskip">${g.queue.length?"Skip this one":"Cancel"}</button></p></form></section>`;
+  }
+  if(g&&g.busy)return `<section class="panel ingest"><h3>Reading ${esc(g.busy)}\u2026</h3><p class="small muted" style="margin:0">Pulling out the vendor, amounts, dates and line items.</p></section>`;
+  return `<label class="drop" id="invdrop" style="max-width:none"><strong>Drop invoice PDFs here</strong><span class="muted">or choose files. Claude reads the vendor, amount, due date and line items, and you check them before saving.</span><br><input type="file" id="invfile" accept="application/pdf,image/png,image/jpeg" multiple style="margin-top:12px"></label>`;
+}
+let pdfjsReady=null;
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement("script");s.src=src;s.onload=res;s.onerror=()=>rej(new Error("load"));document.head.appendChild(s)})}
+function pdfjs(){if(!pdfjsReady)pdfjsReady=(async()=>{await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js");const lib=window["pdfjs-dist/build/pdf"];lib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";return lib})();return pdfjsReady}
+async function readPdf(file){
+  const lib=await pdfjs();const doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  let text="";for(let p=1;p<=Math.min(doc.numPages,8);p++){const pg=await doc.getPage(p);const tc=await pg.getTextContent();let line="",lastY=null;
+    for(const it of tc.items){const y=Math.round(it.transform[5]);if(lastY!==null&&Math.abs(y-lastY)>2){text+=line.trim()+"\n";line=""}line+=it.str+" ";lastY=y}text+=line.trim()+"\n\n"}
+  let image=null;
+  if(text.replace(/\s/g,"").length<60){const pg=await doc.getPage(1);const vp=pg.getViewport({scale:2});const c=document.createElement("canvas");c.width=vp.width;c.height=vp.height;await pg.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;image=await new Promise(r=>c.toBlob(r,"image/png"))}
+  return {text,image};
+}
+async function ingestFiles(files){
+  const list=[...files].filter(f=>/pdf|png|jpe?g/i.test(f.type||f.name));if(!list.length){toast("Drop PDF or image files");return}
+  if(!S.ingest)S.ingest={queue:[],current:null,busy:null};
+  S.ingest.queue.push(...list);if(!S.ingest.current&&!S.ingest.busy)nextIngest();else render();
+}
+async function nextIngest(){
+  const g=S.ingest;const file=g.queue.shift();if(!file){S.ingest=null;render();return}
+  g.busy=file.name;g.current=null;render();
+  let data={supplier:"",invoiceNo:"",received:todayISO(),month:todayISO().slice(0,7),due:"",subtotal:null,discount:null,amount:null,status:"Unpaid",lineItems:[]};let note="";
+  try{
+    let text="",images=[];
+    if(/pdf/i.test(file.type||file.name)){const r=await readPdf(file);text=r.text;if(r.image)images=[r.image]}else images=[file];
+    const sample=S.sample;
+    if(!sample)note="Couldn\u2019t reach Claude here, so fill in the details by hand.";
+    else{
+      let canImg=false;try{canImg=!!(await sample.limits()).images}catch(e){}
+      if(images.length&&!canImg&&!text.trim())note="This file is a scan Claude can\u2019t read here, so fill in the details by hand.";
+      else{
+        const prompt=`You read wholesale cannabis invoices for Firebrand Cannabis, a dispensary in Boston. Firebrand is the BUYER; the vendor is the seller.
+Return ONLY a JSON object with these keys:
+{"vendor": seller company or brand name as printed (never Firebrand), "invoiceNo": string or null, "invoiceDate": "YYYY-MM-DD" or null, "dueDate": "YYYY-MM-DD" or null, "subtotal": number or null, "discount": number or null (positive amount taken off), "total": number (amount due), "lineItems": [{"brand": brand name if shown or obvious from the product name, else null, "product": string, "qty": number or null, "amount": line total number or null}]}
+Use null for anything not on the invoice. At most 80 line items. Numbers without $ or commas.
+${text.trim()?`INVOICE TEXT:\n${text.slice(0,20000)}`:"The invoice is in the attached image."}`;
+        const out=await sample.json(prompt,{modelTier:"default",images:(!text.trim()&&canImg)?images:undefined});
+        const iso=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||"")?s:"";
+        const v=matchVendor(out.vendor);
+        data={supplier:out.vendor||"",vendorKey:v?v.key:"",invoiceNo:out.invoiceNo||"",received:iso(out.invoiceDate)||todayISO(),due:iso(out.dueDate),
+          subtotal:out.subtotal??null,discount:out.discount??null,amount:out.total??null,status:"Unpaid",
+          lineItems:Array.isArray(out.lineItems)?out.lineItems.slice(0,80).map(l=>({brand:l.brand||null,product:String(l.product||"").slice(0,140),qty:Number(l.qty)||null,amount:Number(l.amount)||null})):[]};
+        data.month=(data.received||todayISO()).slice(0,7);
+        note="Read by Claude. Check the numbers before saving.";
+      }
+    }
+  }catch(e){note=e&&e.code==="not_granted"?"Claude access is off for this page, so fill in the details by hand.":e&&e.code==="rate_limited"?"Claude is busy right now, so fill in the details by hand or try again in a minute.":"Couldn\u2019t read this file automatically, so fill in the details by hand."}
+  const dupe=data.invoiceNo&&S.invoices.find(i=>String(i.invoiceNo||"").trim().toLowerCase()===String(data.invoiceNo).trim().toLowerCase()&&(!data.vendorKey||i.vendorKey===data.vendorKey));
+  g.busy=null;g.current={file,fileName:file.name,data,note,dupe:dupe?`${invVendor(dupe)}, ${monthLabel(dupe.month,true)}`:""};render();
+}
+function formData(form){
+  const f=new FormData(form);const nn=k=>{const v=f.get(k);return v===""||v==null?null:Math.round(Number(v)*100)/100};
+  const vk=f.get("vendorKey")||null;const v=vk&&S.model?S.model.vendors.find(x=>x.key===vk):null;
+  return {supplier:String(f.get("supplier")||"").trim(),vendorKey:vk,vendorName:v?v.name:null,invoiceNo:String(f.get("invoiceNo")||"").trim()||null,
+    received:f.get("received")||null,month:f.get("month")||todayISO().slice(0,7),due:f.get("due")||null,subtotal:nn("subtotal"),discount:nn("discount"),amount:nn("amount"),status:f.get("status")||"Unpaid"};
+}
+async function saveIngest(form){
+  const g=S.ingest;if(!g||!g.current)return;if(!S.db){toast("Open this in claude.ai to save invoices");return}
+  const d=formData(form);if(d.amount==null){toast("Add the amount to pay");return}
+  g.busy="saving";render();
+  try{
+    let assetId=null;
+    if(S.assets){try{const r=await S.assets.upload(g.current.file);assetId=r.id}catch(e){toast(e&&e.code==="quota_exceeded"?"File storage is full, saving without the PDF":"Couldn\u2019t store the PDF, saving the details")}}
+    let by=null;try{by=S.user?await S.user.id():null}catch(e){}
+    await S.db.collection("invoices").add(Object.assign(d,{lineItems:g.current.data.lineItems||[],assetId,fileName:g.current.fileName,source:"upload",createdAt:new Date().toISOString(),createdBy:by,paidAt:d.status==="Paid"?new Date().toISOString():null}));
+    toast("Invoice saved");if(S.invF){S.invF.year=d.month.slice(0,4);S.invF.month=d.month.slice(5,7)}g.busy=null;nextIngest();
+  }catch(e){g.busy=null;render();toast("Couldn\u2019t save. Try again.")}
+}
+async function togglePaid(id){
+  const i=S.invoices.find(x=>x.id===id);if(!i||!S.db)return;const paid=i.status!=="Paid";
+  let by=null;try{by=S.user?await S.user.id():null}catch(e){}
+  try{await S.db.doc("invoices/"+id).update({status:paid?"Paid":"Unpaid",paidAt:paid?new Date().toISOString():null,paidBy:paid?by:null});toast(paid?"Marked paid":"Marked unpaid")}catch(e){toast("Couldn\u2019t update. Try again.")}
+}
+async function bulkPaid(){
+  const list=invFiltered().filter(i=>i.status!=="Paid"&&i.status!=="Unpaid");if(!list.length||!S.db)return;
+  if(!confirm(`Mark ${list.length} not-marked invoices shown as paid?`))return;
+  const now=new Date().toISOString();let n=0;
+  for(const i of list){try{await S.db.doc("invoices/"+i.id).update({status:"Paid",paidAt:now});n++}catch(e){}}
+  toast(`Marked ${n} invoices paid`);
+}
+async function saveInvEdit(form){
+  const id=form.dataset.id;const d=formData(form);if(!S.db)return;
+  const i=S.invoices.find(x=>x.id===id);if(d.status==="Paid"&&i&&i.status!=="Paid")d.paidAt=new Date().toISOString();if(d.status!=="Paid")d.paidAt=null;
+  try{await S.db.doc("invoices/"+id).update(d);toast("Saved");S.invOpen=null}catch(e){toast("Couldn\u2019t save. Try again.")}
+}
+async function deleteInv(id){
+  const i=S.invoices.find(x=>x.id===id);if(!i||!S.db)return;if(!confirm(`Delete the ${invVendor(i)} invoice for ${money(i.amount)}?`))return;
+  try{await S.db.doc("invoices/"+id).delete();if(i.assetId&&S.assets){try{await S.assets.delete(i.assetId)}catch(e){}}S.invOpen=null;toast("Invoice deleted")}catch(e){toast("Couldn\u2019t delete. Try again.")}
+}
+async function exportInvoices(){
+  const list=invFiltered();if(!list.length)return;const f=S.invF;
+  const label=[f.year,f.month,f.vendor?invVendor(list[0]):"",f.brand].filter(Boolean).join("_").replace(/[^A-Za-z0-9_-]+/g,"-")||"all";
+  const aoa=[["Firebrand Cannabis invoices"],["Filters",[f.month?MONTHS[+f.month-1]:"All months",f.year||"All years",f.vendor?invVendor(list[0]):"All vendors",f.brand||"All brands"].join(", ")],[],["Received","Vendor","Supplier as written","Invoice #","Subtotal","Discount","Amount to pay","Due","Status","Paid on"]];
+  list.sort((a,b)=>String(a.received||"").localeCompare(String(b.received||""))).forEach(i=>aoa.push([i.received||"",invVendor(i),i.supplier||"",i.invoiceNo||"",i.subtotal??"",i.discount??"",i.amount??"",i.due||"",isOverdue(i)?"Overdue":(i.status||"Not marked"),i.paidAt?i.paidAt.slice(0,10):""]));
+  aoa.push([],["","","","Total","","",list.reduce((a,i)=>a+(Number(i.amount)||0),0)]);
+  if(!S.downloads||!window.XLSX){toast("Downloads aren\u2019t available in this view");return}
+  const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=[{wch:12},{wch:30},{wch:26},{wch:16},{wch:11},{wch:10},{wch:13},{wch:12},{wch:11},{wch:11}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Invoices");
+  try{await S.downloads.save({filename:`Firebrand_Invoices_${label}.xlsx`,data:new Blob([XLSX.write(wb,{type:"array",bookType:"xlsx"})],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})})}catch(e){}
+}
+
+function viewGuide(){
+  return `<div class="guide"><h2>How it works</h2><p class="lede">The planner tells us what to order, from which vendor, when, and how much, so we stop guessing from the shelves or taking a vendor’s suggested order at face value.</p>
+  <section><h3>The short version</h3><ul>
+    <li>Every vendor gets ordered <b>once a month</b>, in its own week. Our five biggest vendors get ordered <b>twice a month</b>.</li>
+    <li>Each order is sized to last until that vendor’s next order, plus a little extra so we don’t run out.</li>
+    <li>Juan uploads one Dutchie report a week. Everything else updates on its own for everyone.</li>
+    <li>Deliveries come in Monday to Wednesday, so we’re stocked before the weekend.</li>
+  </ul></section>
+  <section><h3>Juan’s week, step by step</h3><ol>
+    <li><b>Monday morning:</b> in Dutchie, export the Inventory Order Report for the last 30 days. Drop it on the <a href="#upload">Upload</a> tab and choose Save report.</li>
+    <li>Open <a href="#week">This week</a>. It shows only the vendors scheduled for this week, split by Monday, Tuesday and Wednesday.</li>
+    <li>On each order day, click a vendor. Order the brands marked <span class="status s-order">ORDER</span>, in the units shown. The “Pick” line says which products to choose.</li>
+    <li>Follow the <b>How to order</b> box for that vendor. Apex vendors: open the menu and add the items. Excel form vendors: download the PO file and copy the quantities into their form. Email vendors: use the Email button, or copy the order text. Every PO file says deliveries are Monday to Wednesday only.</li>
+    <li>Check the <b>Top brands that will run out</b> box. Those are the only extra orders allowed between scheduled orders, and Michael approves them.</li>
+    <li>Michael signs off on anything over the week’s budget, and any brand marked Review.</li>
+  </ol></section>
+  <section><h3>What the words mean</h3><dl class="terms">
+    <dt><span class="status s-order">ORDER</span></dt><dd>Put this brand on the vendor’s next PO, in the suggested units.</dd>
+    <dt><span class="status s-ok">OK</span></dt><dd>We have enough until the next order. Skip it this time.</dd>
+    <dt><span class="status s-over">Overstocked</span></dt><dd>We have more than 60 days of it. Don’t order any until it sells down. Push it with placement, staff picks or a promo.</dd>
+    <dt><span class="status s-confirm">Confirm, then order</span></dt><dd>We’re out and haven’t received it in 2+ months. Decide if we still want to carry it before reordering.</dd>
+    <dt><span class="status s-confirm">Top-up</span></dt><dd>A top seller that will run out before its vendor’s next scheduled order. A small order just to bridge the gap.</dd>
+    <dt>Tier A, B, C</dt><dd>How much a brand matters to sales. A brands make up the top 80% of sales, B the next 15%, C the rest. A brands get the biggest safety cushion and are the only ones allowed top-ups.</dd>
+    <dt>Units/day</dt><dd>How many we sell on an average day, based on the report Juan uploaded.</dd>
+    <dt>Days left</dt><dd>How long what’s on hand will last at that pace.</dd>
+    <dt>Order up to</dt><dd>The amount we want on hand right after an order is placed. The order is that number minus what we already have.</dd>
+    <dt>MOQ</dt><dd>The vendor’s minimum order. If a PO is under it, wait for the next order day unless a Tier A brand would run out.</dd>
+  </dl></section>
+  <section><h3>How the order size is figured</h3><p>Say a brand sells <b>10 a day</b>, it’s ordered once a month, delivery takes about a week, and it’s a Tier A brand.</p>
+    <div class="math"><div><span>A month of sales until the next order (28 days)</span><span>280</span></div><div><span>Sales while we wait for delivery (7 days)</span><span>70</span></div><div><span>Safety cushion for a busy stretch (7 days)</span><span>70</span></div><div class="tot"><span>Order up to</span><span>420</span></div><div><span>Minus what’s on the shelves and in the vault</span><span>−150</span></div><div class="tot"><span>Order</span><span>270 units</span></div></div>
+    <p>Twice-a-month vendors use two weeks instead of a month, so each order is about half as big. If there’s already plenty on hand, the planner says OK and orders nothing.</p></section>
+  <section><h3>Invoices</h3><ol>
+    <li>When an invoice comes in, drop the PDF on the <a href="#invoices">Invoices</a> tab. Claude reads the vendor, invoice number, amount, due date and line items.</li>
+    <li>Check the numbers, fix anything that’s off, and choose Save invoice. The PDF is stored with it.</li>
+    <li>When it’s paid, choose <b>Mark paid</b> on its row. Overdue invoices turn red.</li>
+    <li>Pick a month to see total purchases against the budget, spend by vendor and by brand, and what’s due in the next two weeks. <b>Download</b> gives the month as an Excel file.</li>
+  </ol></section>
+  <section><h3>The budget</h3><p>We spend 35–45% of last month’s sales on product each month, split evenly across weeks 1 to 4. Megan updates last month’s sales on <a href="#setup">Budget &amp; rules</a> at the start of each month. If a week runs over, Tier A brands get funded first, then B, then C.</p></section>
+  <section><h3>Common questions</h3><dl class="terms">
+    <dt>The order looks too small</dt><dd>The brand probably has stock on hand already, or it’s selling slower than it used to. Check Units/day and On hand in the vendor’s row.</dd>
+    <dt>The rep sent a suggested order</dt><dd>Use it as a starting point, then trim it to the planner’s numbers.</dd>
+    <dt>A brand isn’t showing up</dt><dd>It needs the Brand field filled in Dutchie. Products without one are grouped under the vendor’s name.</dd>
+    <dt>I want to change a vendor’s week or day</dt><dd>Open the vendor on the <a href="#vendors">Vendors</a> tab and change it there. It saves for everyone.</dd>
+    <dt>The numbers look old</dt><dd>The line under the Firebrand logo shows when the last report was uploaded. If it’s more than a week old, upload a new one.</dd>
+  </dl></section></div>`;
+}
+function render(){
+  freshLine();
+  const main=$("#main");const m=S.model;let html;
+  if(S.route==="guide")html=viewGuide();
+  else if(S.route==="invoices")html=viewInvoices();
+  else if(S.route==="upload")html=viewUpload();
+  else if(S.route==="setup")html=viewSetup();
+  else if(!m)html=S.dbState==="loading"?`<p class="muted">Loading…</p>`:emptyState();
+  else html={week:viewWeek,vendors:viewVendors,brands:viewBrands,overstock:viewOverstock}[S.route](m);
+  const ae=document.activeElement;const keepId=ae&&ae.id;const caret=ae&&ae.selectionStart;
+  main.innerHTML=html;
+  if(keepId){const el=document.getElementById(keepId);if(el){el.focus();try{el.setSelectionRange(caret,caret)}catch(e){}}}
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click",e=>{
+  const im=e.target.closest("[data-inv-month]");if(im){const k=im.dataset.invMonth;S.invF.year=k.slice(0,4);S.invF.month=S.invF.month===k.slice(5,7)?"":k.slice(5,7);S.invOpen=null;render();return}
+  const iset=e.target.closest("[data-inv-set]");if(iset){S.invF[iset.dataset.invSet]=iset.dataset.val;S.invOpen=null;render();return}
+  if(e.target.id==="invf-clear"){S.invF={year:"",month:"",vendor:"",brand:""};render();return}
+  if(e.target.id==="invbulk"){bulkPaid();return}
+  const ip=e.target.closest("[data-inv-paid]");if(ip){togglePaid(ip.dataset.invPaid);return}
+  const idl=e.target.closest("[data-inv-del]");if(idl){deleteInv(idl.dataset.invDel);return}
+  const iff=e.target.closest("[data-inv-f]");if(iff){S.invFilter=iff.dataset.invF;render();return}
+  if(e.target.id==="invexport"){exportInvoices();return}
+  if(e.target.id==="ingskip"){if(S.ingest){S.ingest.current=null;nextIngest()}return}
+  const it=e.target.closest("[data-inv-toggle]");if(it&&!e.target.closest("a,button,select,input")){S.invOpen=S.invOpen===it.dataset.invToggle?null:it.dataset.invToggle;render();return}
+  const o=e.target.closest("[data-open]");if(o){S.open=o.dataset.open;location.hash="#vendors";if(S.route==="vendors")render();return}
+  const tg=e.target.closest("[data-toggle]");if(tg&&!e.target.closest("select,input,button")){S.open=S.open===tg.dataset.toggle?null:tg.dataset.toggle;render();return}
+  const bf=e.target.closest("[data-bf]");if(bf){S.brandFilter=bf.dataset.bf;render();return}
+  const po=e.target.closest("[data-po]");if(po){const v=S.model.vendors.find(x=>x.key===po.dataset.po);if(v)downloadPO(v);return}
+  if(e.target.id==="savep"&&S.parsed){const d=$("#pdays");if(d)S.parsed.meta.days=Math.max(1,+d.value||30);saveReport(S.parsed);return}
+  if(e.target.id==="cancelp"){S.parsed=null;render()}
+});
+document.addEventListener("keydown",e=>{const tg=e.target.closest&&e.target.closest("[data-toggle]");if(tg&&e.target===tg&&(e.key==="Enter"||e.key===" ")){e.preventDefault();S.open=S.open===tg.dataset.toggle?null:tg.dataset.toggle;render()}});
+document.addEventListener("input",e=>{
+  if(e.target.id==="vq"){S.vendorQuery=e.target.value;render()}
+  if(e.target.id==="bq"){S.brandQuery=e.target.value;render()}
+  if(e.target.id==="invq"){S.invQuery=e.target.value;render()}
+});
+document.addEventListener("change",e=>{
+  const t=e.target;
+  if(t.dataset.vf){const v=S.model.vendors.find(x=>x.key===t.dataset.key);if(!v)return;
+    let val=t.value;if(t.dataset.vf==="lead"||t.dataset.vf==="moq")val=t.value===""?null:Math.max(0,+t.value);
+    if(t.dataset.vf==="week")val=+t.value;
+    const patch={day:v.day,freq:v.freq,week:v.week,[t.dataset.vf]:val};
+    if(t.dataset.vf==="freq"&&val==="Twice a month"&&patch.week>2)patch.week-=2;
+    saveVendor(v.key,v.name,patch);return}
+  if(t.dataset.keep){saveBrand(t.dataset.keep,t.value);return}
+  if(t.id==="file"&&t.files[0])readFile(t.files[0]);
+  if(t.id==="invfile"&&t.files.length)ingestFiles(t.files);
+  if(t.id&&t.id.startsWith("invf-")){S.invF[t.id.slice(5)]=t.value;S.invOpen=null;render()}
+});
+document.addEventListener("submit",e=>{
+  if(e.target.id==="ingestform"){e.preventDefault();saveIngest(e.target);return}
+  if(e.target.classList.contains("invedit")){e.preventDefault();saveInvEdit(e.target);return}
+  if(e.target.id!=="setform")return;e.preventDefault();const f=new FormData(e.target);const g=k=>Number(f.get(k));
+  saveSettings({lastMonthSales:g("lastMonthSales"),floorPct:g("floorPct")/100,ceilPct:g("ceilPct")/100,leadDefault:g("leadDefault"),overDays:g("overDays"),
+    reviewMonthly:g("reviewMonthly"),reviewTwice:g("reviewTwice"),tiers:{A:{safety:g("safA")},B:{safety:g("safB")},C:{safety:g("safC")}}});
+});
+["dragover","dragenter"].forEach(ev=>document.addEventListener(ev,e=>{const d=e.target.closest&&e.target.closest("#drop,#invdrop");if(d){e.preventDefault();d.classList.add("hover")}}));
+["dragleave","drop"].forEach(ev=>document.addEventListener(ev,e=>{const d=e.target.closest&&e.target.closest("#drop,#invdrop");if(d){e.preventDefault();d.classList.remove("hover");if(ev==="drop"&&e.dataTransfer.files.length){if(d.id==="invdrop")ingestFiles(e.dataTransfer.files);else readFile(e.dataTransfer.files[0])}}}));
+function readFile(file){
+  const r=new FileReader();
+  r.onload=()=>{try{S.parsed=parseReport(new Uint8Array(r.result),file.name);render()}catch(err){render();const p=$("#perr");if(p)p.innerHTML=`<p class="notice err" style="margin-top:14px">${esc(err.message)}</p>`}};
+  r.onerror=()=>toast("Couldn’t read that file");
+  r.readAsArrayBuffer(file);
+}
+boot();
+})();
+</script>
+</body>
+</html>
